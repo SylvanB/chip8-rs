@@ -6,6 +6,7 @@ pub(crate) const PROGRAM_START_OFFSET: usize = 0x200;
 
 pub(crate) const ETI_600_PROGRAM_START_OFFSET: usize = 0x600;
 
+#[derive(Debug)]
 pub(crate) struct Memory {
     pub data: Vec<u8>,
 }

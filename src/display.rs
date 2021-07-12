@@ -1,3 +1,4 @@
+#[derive(Debug)]
 pub(crate) struct Display {
     screen: [[u8; 32]; 64],
 }

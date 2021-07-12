@@ -1,7 +1,8 @@
 use rand::Rng;
 
-use crate::{display::Display, memory::Memory};
+use crate::{display::Display, memory::Memory, opcode::OpCode};
 
+#[derive(Debug)]
 pub(crate) struct CPU {
     pub memory: Memory,
     pub display: Display,
@@ -60,8 +61,8 @@ impl CPU {
 
     pub fn execute(&mut self) {
         while let Some(op) = self.get_op() {
-            match op {
-                0x0000..=0x0ff => match op {
+            match op.raw() {
+                0x0000..=0x0ff => match op.raw() {
                     0x00e0 => self.cls(),
                     0x00ee => self.ret(),
                     _ => break, // _ => panic!("Unexpected opcode. {}", op),
@@ -83,6 +84,7 @@ impl CPU {
                 0xf000..=0xffff => todo!(),
                 _ => break, // _ => panic!("Invalid op code."),
             };
+            println!("{:#?}", &self);
         }
     }
 
@@ -90,16 +92,13 @@ impl CPU {
     ///
     /// Opcodes are constructed from 2 bytes, the most significant first (big endian)
     /// We fetch the next two values in memory and construct the opcode by shifting and bitwise AND'ing the bytes.
-    fn get_op(&mut self) -> Option<u16> {
-        dbg!(format!("{:x?}", self.pc));
-        let a = self.memory.get(self.pc as _) as u16;
-        dbg!(format!("{:x?}", a));
+    fn get_op(&mut self) -> Option<OpCode> {
+        let a = (self.memory.get(self.pc as _) as u16) << 8;
         self.pc += 1;
         let b = self.memory.get(self.pc as _) as u16;
         self.pc += 1;
 
-        dbg!(format!("{:x?}", ((a << 8) | b)));
-        Some((a << 8) | b)
+        Some(OpCode::new((a | b) as u16))
     }
 
     /// Asks the Display to clear the screen
@@ -119,25 +118,22 @@ impl CPU {
     }
 
     /// Jumps to a given memory location
-    fn jp(&mut self, op: &u16) {
-        self.pc = op & 0x0fff;
+    fn jp(&mut self, op: &OpCode) {
+        self.pc = op.nnn();
     }
 
     /// Calls the subroutine at the specific address
-    fn call(&mut self, op: &u16) {
+    fn call(&mut self, op: &OpCode) {
         self.sp += 1;
         self.stack[self.sp as usize] = self.pc;
-        self.pc = op & 0x0fff;
+        self.pc = op.nnn();
     }
 
     /// Skip if a register value is equal to a given byte
     ///
     /// Given a op of `0x3[X][KK]` if the  value of `V[X] == [KK]` skip the next instruction
-    fn se(&mut self, op: &u16) {
-        let x = op & 0x0F00;
-        let kk = op & 0x00FF;
-
-        if (self.v[x as usize]) as u16 == kk {
+    fn se(&mut self, op: &OpCode) {
+        if (self.v[op.x() as usize]) == op.kk() {
             self.pc += 2;
         }
     }
@@ -145,102 +141,78 @@ impl CPU {
     /// Skip if a register value is not equal to a given byte
     ///
     /// Given a op of `0x3[X][KK]` if the  value of `V[X] != [KK]` skip the next instruction
-    fn sne(&mut self, op: &u16) {
-        let x = op & 0x0F00;
-        let kk = op & 0x00FF;
-
-        if (self.v[x as usize]) as u16 != kk {
+    fn sne(&mut self, op: &OpCode) {
+        if (self.v[op.x() as usize]) != op.kk() {
             self.pc += 2;
         }
     }
 
     /// Skip if the register `Vx` == `Vy`
-    fn se_r(&mut self, op: &u16) {
-        let x = op & 0x0F00;
-        let y = op & 0x00F0;
-
-        if self.v[x as usize] == self.v[y as usize] {
+    fn se_r(&mut self, op: &OpCode) {
+        if self.v[op.x() as usize] == self.v[op.y() as usize] {
             self.pc += 2;
         }
     }
 
     /// Loads the value `kk` into the register `Vx`
-    fn ld_r(&mut self, op: &u16) {
-        let x = op & 0x0F00;
-        let kk = (op & 0x00FF) as u8;
-
-        self.v[x as usize] = kk;
+    fn ld_r(&mut self, op: &OpCode) {
+        self.v[op.x() as usize] = op.kk();
     }
 
     // Adds the value `kk` to the value in the register `Vx`
-    fn add(&mut self, op: &u16) {
-        let x = op & 0x0F00;
-        let kk = (op & 0x00FF) as u8;
-
-        self.v[x as usize] += kk;
+    fn add(&mut self, op: &OpCode) {
+        self.v[op.x() as usize] += op.kk();
     }
 
     /// Loads the value in the register `Vy` into the register `Vx`
-    fn ld_xy(&mut self, op: &u16) {
-        let x = op & 0x0F00;
-        let y = op & 0x00F0;
-
-        self.v[x as usize] = self.v[y as usize];
+    fn ld_xy(&mut self, op: &OpCode) {
+        self.v[op.x() as usize] = self.v[op.y() as usize];
     }
 
-    fn ops_8(&mut self, op: &u16) {
-        if op & 0x000F == 0x0 {
+    fn ops_8(&mut self, op: &OpCode) {
+        if op.raw() & 0x000F == 0x0 {
             self.ld_xy(&op);
-        } else if op & 0x000F == 0x1 {
+        } else if op.raw() & 0x000F == 0x1 {
             self.or_xy(&op);
-        } else if op & 0x000F == 0x2 {
+        } else if op.raw() & 0x000F == 0x2 {
             self.and_xy(&op);
-        } else if op & 0x000F == 0x3 {
+        } else if op.raw() & 0x000F == 0x3 {
             self.xor_xy(&op);
-        } else if op & 0x000F == 0x4 {
+        } else if op.raw() & 0x000F == 0x4 {
             self.add_xy(&op);
-        } else if op & 0x000F == 0x5 {
+        } else if op.raw() & 0x000F == 0x5 {
             self.sub_xy(&op);
-        } else if op & 0x000F == 0x6 {
+        } else if op.raw() & 0x000F == 0x6 {
             self.shr(&op);
-        } else if op & 0x000F == 0x7 {
+        } else if op.raw() & 0x000F == 0x7 {
             self.subn_yx(&op);
-        } else if op & 0x000F == 0xE {
+        } else if op.raw() & 0x000F == 0xE {
             self.subn_yx(&op);
         } else {
         }
     }
 
     /// Performs a bitwise OR operation on the values in the registers `Vx` and `Vy` and stores the result in `Vx`
-    fn or_xy(&mut self, op: &u16) {
-        let x = op & 0x0F00;
-        let y = op & 0x00F0;
-
-        self.v[x as usize] |= self.v[y as usize];
+    fn or_xy(&mut self, op: &OpCode) {
+        self.v[op.x() as usize] |= self.v[op.y() as usize];
     }
 
     /// Performs a bitwise AND operation on the values in the registers `Vx` and `Vy` and stores the result in `Vx`
-    fn and_xy(&mut self, op: &u16) {
-        let x = op & 0x0F00;
-        let y = op & 0x00F0;
-
-        self.v[x as usize] &= self.v[y as usize];
+    fn and_xy(&mut self, op: &OpCode) {
+        self.v[op.x() as usize] &= self.v[op.y() as usize];
     }
 
     /// Performs a bitwise XOR operation on the values in the registers `Vx` and `Vy` and stores the result in `Vx`
-    fn xor_xy(&mut self, op: &u16) {
-        let x = op & 0x0F00;
-        let y = op & 0x00F0;
-
-        self.v[x as usize] ^= self.v[y as usize];
+    fn xor_xy(&mut self, op: &OpCode) {
+        self.v[op.x() as usize] ^= self.v[op.y() as usize];
     }
 
     /// Adds the values of registers `Vx` and `Vy` and stores the lower byte into `Vx`
     ///
     /// If the result of the addition is greater than 255, the VF flag is set to 1 else 0;
-    fn add_xy(&mut self, op: &u16) {
-        let x = op & 0x0F00;
-        let y = op & 0x00F0;
+    fn add_xy(&mut self, op: &OpCode) {
+        let x = op.x();
+        let y = op.y();
 
         let vx = self.v[x as usize] as u16;
         let vy = self.v[y as usize] as u16;
@@ -259,9 +231,9 @@ impl CPU {
     /// Subtracts the value of the register `Vy` from `Vx` and stores it in `Vx`
     ///
     /// If `Vx` > `Vy` set VF to 1, else 0
-    fn sub_xy(&mut self, op: &u16) {
-        let x = op & 0x0F00;
-        let y = op & 0x00F0;
+    fn sub_xy(&mut self, op: &OpCode) {
+        let x = op.x();
+        let y = op.y();
 
         let vx = self.v[x as usize] as u16;
         let vy = self.v[y as usize] as u16;
@@ -280,9 +252,9 @@ impl CPU {
     /// Subtracts the value of the register `Vy` from `Vx` and stores it in `Vx`
     ///
     /// If `Vx` > `Vy` set VF to 1, else 0
-    fn subn_yx(&mut self, op: &u16) {
-        let x = op & 0x0F00;
-        let y = op & 0x00F0;
+    fn subn_yx(&mut self, op: &OpCode) {
+        let x = op.x();
+        let y = op.y();
 
         let vx = self.v[x as usize] as u16;
         let vy = self.v[y as usize] as u16;
@@ -301,10 +273,10 @@ impl CPU {
     /// Shifts the value of `Vx` right by 1 bit
     ///
     /// If the least-significant bit of `Vx` is 1, then VF is set to 1, else 0.
-    fn shr(&mut self, op: &u16) {
+    fn shr(&mut self, op: &OpCode) {
         // TODO: Allow the additional `Vy` register to be shifted optionally
 
-        let x = op & 0x0F00;
+        let x = op.x();
         let vx = self.v[x as usize];
 
         self.v[x as usize] = vx >> 1;
@@ -319,10 +291,10 @@ impl CPU {
     /// Shifts the value of `Vx` left by 1 bit
     ///
     /// If the most-significant bit of `Vx` is 1, then VF is set to 1, else 0.
-    fn shl(&mut self, op: &u16) {
+    fn shl(&mut self, op: &OpCode) {
         // TODO: Allow the additional `Vy` register to be shifted optionally
 
-        let x = op & 0x0F00;
+        let x = op.x();
         let vx = self.v[x as usize];
 
         self.v[x as usize] = vx << 1;
@@ -337,9 +309,9 @@ impl CPU {
     /// Skip if a register value is not equal to a given byte
     ///
     /// Given a op of `0x3[X][KK]` if the  value of `V[X] != [KK]` skip the next instruction
-    fn sne_xy(&mut self, op: &u16) {
-        let x = op & 0x0F00;
-        let y = op & 0x00F0;
+    fn sne_xy(&mut self, op: &OpCode) {
+        let x = op.x();
+        let y = op.y();
 
         let vx = self.v[x as usize];
         let vy = self.v[y as usize];
@@ -349,21 +321,21 @@ impl CPU {
         }
     }
 
-    fn ld_i(&mut self, op: &u16) {
-        let addr = op & 0x0FFF;
+    fn ld_i(&mut self, op: &OpCode) {
+        let addr = op.nnn();
 
         self.VI = addr;
     }
 
-    fn jp_v0(&mut self, op: &u16) {
-        let addr = op & 0x0FFF;
+    fn jp_v0(&mut self, op: &OpCode) {
+        let addr = op.nnn();
 
         self.pc = (self.v[0] as u16) + addr;
     }
 
-    fn rnd(&mut self, op: &u16) {
-        let x = op & 0x0F00;
-        let kk = (op & 0x00FF) as u8;
+    fn rnd(&mut self, op: &OpCode) {
+        let x = op.x();
+        let kk = op.kk();
 
         let rand_number: u8 = rand::thread_rng().gen_range(0..=255);
         let res = kk & rand_number;
@@ -371,5 +343,5 @@ impl CPU {
         self.v[x as usize] = res;
     }
 
-    fn drw(&mut self, op: &u16) {}
+    fn drw(&mut self, op: &OpCode) {}
 }
