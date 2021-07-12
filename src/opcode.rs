@@ -14,7 +14,7 @@ impl OpCode {
             inner: raw_opcode,
             id: ((raw_opcode & 0xF000) >> 12) as u8,
             x: ((raw_opcode & 0x0F00) >> 8) as u8,
-            y: (raw_opcode & 0x00F0) as u8,
+            y: ((raw_opcode & 0x00F0) >> 4) as u8,
             kk: (raw_opcode & 0x00FF) as u8,
             nnn: (raw_opcode & 0x0FFF),
         }
@@ -42,5 +42,43 @@ impl OpCode {
 
     pub fn nnn(&self) -> u16 {
         self.nnn
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::opcode::OpCode;
+
+    #[test]
+    fn should_generate_correct_raw_value() {
+        assert!(OpCode::new(0x1234).raw() == 0x1234);
+    }
+
+    #[test]
+    fn should_generate_correct_id_value() {
+        assert!(OpCode::new(0x1234).id() == 0x1);
+    }
+
+    #[test]
+    fn should_generate_correct_x_value() {
+        assert!(OpCode::new(0x1234).x() == 0x2);
+    }
+
+    #[test]
+    fn should_generate_correct_y_value() {
+        let op = OpCode::new(0x1234).y();
+        dbg!(op);
+
+        assert!(OpCode::new(0x1234).y() == 0x3);
+    }
+
+    #[test]
+    fn should_generate_correct_kk_value() {
+        assert!(OpCode::new(0x1234).kk() == 0x34);
+    }
+
+    #[test]
+    fn should_generate_correct_nnn_value() {
+        assert!(OpCode::new(0x1234).nnn() == 0x234);
     }
 }
