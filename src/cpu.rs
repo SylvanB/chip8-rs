@@ -11,10 +11,10 @@ pub(crate) struct CPU {
     pub v: [u8; 15],
 
     // Used for program flags
-    pub VF: u8,
+    pub vf: u8,
 
     // Commonly used to store memory addresses
-    pub VI: u16,
+    pub vi: u16,
 
     /*
        Delay register:
@@ -49,8 +49,8 @@ impl CPU {
             memory,
             display,
             v: [0; 15],
-            VF: 0x0,
-            VI: 0x0,
+            vf: 0x0,
+            vi: 0x0,
             delay: 0x0,
             sound_timer: 0x0,
             pc: 0x200,
@@ -59,33 +59,42 @@ impl CPU {
         }
     }
 
+    pub fn execute_next_instruction(&mut self) {
+        if let Some(op) = self.get_op() {
+            self.execute_op(op);
+        }
+    }
+
     pub fn execute(&mut self) {
         while let Some(op) = self.get_op() {
-            match op.raw() {
-                0x0000..=0x0ff => match op.raw() {
-                    0x00e0 => self.cls(),
-                    0x00ee => self.ret(),
-                    _ => break, // _ => panic!("Unexpected opcode. {}", op),
-                },
-                0x1000..=0x1fff => self.jp(&op),
-                0x2000..=0x2fff => self.call(&op),
-                0x3000..=0x3fff => self.se(&op),
-                0x4000..=0x4fff => self.sne(&op),
-                0x5000..=0x5fff => self.se_r(&op),
-                0x6000..=0x6fff => self.ld_r(&op),
-                0x7000..=0x7fff => self.add(&op),
-                0x8000..=0x8fff => self.ops_8(&op),
-                0x9000..=0x9fff => self.sne_xy(&op),
-                0xa000..=0xafff => self.ld_i(&op),
-                0xb000..=0xbfff => self.jp_v0(&op),
-                0xc000..=0xcfff => self.rnd(&op),
-                0xd000..=0xdfff => todo!(),
-                0xe000..=0xefff => todo!(),
-                0xf000..=0xffff => todo!(),
-                _ => break, // _ => panic!("Invalid op code."),
-            };
-            println!("{:#?}", &self);
+            self.execute_op(op);
         }
+    }
+
+    fn execute_op(&mut self, op: OpCode) {
+        match op.raw() {
+            0x0000..=0x0ff => match op.raw() {
+                0x00e0 => self.cls(),
+                0x00ee => self.ret(),
+                _ => {} // no-op
+            },
+            0x1000..=0x1fff => self.jp(&op),
+            0x2000..=0x2fff => self.call(&op),
+            0x3000..=0x3fff => self.se(&op),
+            0x4000..=0x4fff => self.sne(&op),
+            0x5000..=0x5fff => self.se_r(&op),
+            0x6000..=0x6fff => self.ld_r(&op),
+            0x7000..=0x7fff => self.add(&op),
+            0x8000..=0x8fff => self.ops_8(&op),
+            0x9000..=0x9fff => self.sne_xy(&op),
+            0xa000..=0xafff => self.ld_i(&op),
+            0xb000..=0xbfff => self.jp_v0(&op),
+            0xc000..=0xcfff => self.rnd(&op),
+            0xd000..=0xdfff => todo!(),
+            0xe000..=0xefff => todo!(),
+            0xf000..=0xffff => todo!(),
+            _ => {} // no-op
+        };
     }
 
     /// Get the next opcode
@@ -119,6 +128,7 @@ impl CPU {
 
     /// Jumps to a given memory location
     fn jp(&mut self, op: &OpCode) {
+        dbg!(op.nnn());
         self.pc = op.nnn();
     }
 
@@ -187,7 +197,7 @@ impl CPU {
         } else if op.raw() & 0x000F == 0x7 {
             self.subn_yx(&op);
         } else if op.raw() & 0x000F == 0xE {
-            self.subn_yx(&op);
+            self.shl(&op);
         } else {
         }
     }
@@ -220,9 +230,9 @@ impl CPU {
         let res = vx + vy;
 
         if res > 255 {
-            self.VF = 1;
+            self.vf = 1;
         } else {
-            self.VF = 0;
+            self.vf = 0;
         }
 
         self.v[x as usize] = (res & 0x00FF) as u8;
@@ -241,9 +251,9 @@ impl CPU {
         let res = vx - vy;
 
         if vx > vy {
-            self.VF = 1;
+            self.vf = 1;
         } else {
-            self.VF = 0;
+            self.vf = 0;
         }
 
         self.v[x as usize] = (res & 0x00FF) as u8;
@@ -262,9 +272,9 @@ impl CPU {
         let res = vy - vx;
 
         if vy > vx {
-            self.VF = 1;
+            self.vf = 1;
         } else {
-            self.VF = 0;
+            self.vf = 0;
         }
 
         self.v[x as usize] = (res & 0x00FF) as u8;
@@ -282,9 +292,9 @@ impl CPU {
         self.v[x as usize] = vx >> 1;
 
         if vx & 0x0001 == 1 {
-            self.VF = 1;
+            self.vf = 1;
         } else {
-            self.VF = 0;
+            self.vf = 0;
         }
     }
 
@@ -300,15 +310,15 @@ impl CPU {
         self.v[x as usize] = vx << 1;
 
         if vx & 0x0001 == 1 {
-            self.VF = 1;
+            self.vf = 1;
         } else {
-            self.VF = 0;
+            self.vf = 0;
         }
     }
 
-    /// Skip if a register value is not equal to a given byte
+    /// Skip if a register value is not equal to the value of another register
     ///
-    /// Given a op of `0x3[X][KK]` if the  value of `V[X] != [KK]` skip the next instruction
+    /// Given a op of `0x3[X][Y]0` if the  value of `V[X] != V[Y]` skip the next instruction
     fn sne_xy(&mut self, op: &OpCode) {
         let x = op.x();
         let y = op.y();
@@ -324,7 +334,7 @@ impl CPU {
     fn ld_i(&mut self, op: &OpCode) {
         let addr = op.nnn();
 
-        self.VI = addr;
+        self.vi = addr;
     }
 
     fn jp_v0(&mut self, op: &OpCode) {
@@ -344,4 +354,354 @@ impl CPU {
     }
 
     fn drw(&mut self, op: &OpCode) {}
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{display::Display, memory::Memory};
+
+    use super::CPU;
+
+    fn get_cpu() -> CPU {
+        CPU::initialise(Memory::initialise(), Display::initialise())
+    }
+
+    fn load_new_cpu_with_instruction(op: u16) -> CPU {
+        let mut cpu = get_cpu();
+        cpu.memory.data[0x200] = ((op & 0xFF00) >> 8) as u8;
+        cpu.memory.data[0x201] = (op & 0x00FF) as u8;
+
+        dbg!(cpu.memory.data[0x200], cpu.memory.data[0x201]);
+        cpu
+    }
+
+    #[test]
+    fn ret() {
+        let mut cpu = load_new_cpu_with_instruction(0x00EE);
+
+        cpu.sp = 1;
+        cpu.stack[1] = 0x500;
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.sp, 0);
+        assert_eq!(cpu.pc, 0x500);
+    }
+
+    #[test]
+    fn cls() {
+        // Do this some other time when we actually have shit that displays
+    }
+
+    #[test]
+    fn jp() {
+        let mut cpu = load_new_cpu_with_instruction(0x1666);
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.pc, 0x666);
+    }
+
+    #[test]
+    fn call() {
+        let mut cpu = load_new_cpu_with_instruction(0x2666);
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.sp, 1);
+        assert_eq!(cpu.stack[cpu.sp as usize], 0x202);
+        assert_eq!(cpu.pc, 0x666);
+    }
+
+    #[test]
+    fn se_jumps_when_equal() {
+        let mut cpu = load_new_cpu_with_instruction(0x3000);
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.pc, 0x204);
+    }
+
+    #[test]
+    fn se_doesnt_jump_when_not_equal() {
+        let mut cpu = load_new_cpu_with_instruction(0x3066);
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.pc, 0x202);
+    }
+
+    #[test]
+    fn sne_jumps_when_not_equal() {
+        let mut cpu = load_new_cpu_with_instruction(0x4066);
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.pc, 0x204);
+    }
+
+    #[test]
+    fn sne_doesnt_jump_when_equal() {
+        let mut cpu = load_new_cpu_with_instruction(0x4000);
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.pc, 0x202);
+    }
+
+    #[test]
+    fn se_r_jumps_when_equal() {
+        let mut cpu = load_new_cpu_with_instruction(0x5000);
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.pc, 0x204);
+    }
+
+    #[test]
+    fn se_r_doesnt_jump_when_not_equal() {
+        let mut cpu = load_new_cpu_with_instruction(0x5010);
+        cpu.v[1] = 1;
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.pc, 0x202);
+    }
+
+    #[test]
+    fn ld_r() {
+        let mut cpu = load_new_cpu_with_instruction(0x6066);
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.v[0], 0x66);
+    }
+
+    #[test]
+    fn add() {
+        let mut cpu = load_new_cpu_with_instruction(0x7066);
+
+        cpu.v[0] = 0x10;
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.v[0], 0x76);
+    }
+
+    #[test]
+    fn ld_xy() {
+        let mut cpu = load_new_cpu_with_instruction(0x8010);
+
+        cpu.v[1] = 0x10;
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.v[0], 0x10);
+    }
+
+    #[test]
+    fn or_xy() {
+        let mut cpu = load_new_cpu_with_instruction(0x8011);
+        cpu.v[0] = 0x01;
+        cpu.v[1] = 0x10;
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.v[0], 0x11);
+    }
+
+    #[test]
+    fn or_xy_inverse() {
+        let mut cpu = load_new_cpu_with_instruction(0x8011);
+        cpu.v[0] = 0x11;
+        cpu.v[1] = 0x11;
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.v[0], 0x11);
+    }
+
+    #[test]
+    fn and_xy() {
+        let mut cpu = load_new_cpu_with_instruction(0x8012);
+        cpu.v[0] = 0x01;
+        cpu.v[1] = 0x10;
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.v[0], 0x00);
+    }
+
+    #[test]
+    fn xor_xy() {
+        let mut cpu = load_new_cpu_with_instruction(0x8013);
+        cpu.v[0] = 0x11;
+        cpu.v[1] = 0x11;
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.v[0], 0x00);
+    }
+
+    #[test]
+    fn xor_xy_inverse() {
+        let mut cpu = load_new_cpu_with_instruction(0x8013);
+        cpu.v[0] = 0x01;
+        cpu.v[1] = 0x10;
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.v[0], 0x11);
+    }
+
+    #[test]
+    fn add_xy_no_carry() {
+        let mut cpu = load_new_cpu_with_instruction(0x8014);
+        cpu.v[0] = 0xF0;
+        cpu.v[1] = 0x0F;
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.v[0], 0xFF);
+        assert_eq!(cpu.vf, 0x0);
+    }
+
+    #[test]
+    fn add_xy_carry() {
+        let mut cpu = load_new_cpu_with_instruction(0x8014);
+        cpu.v[0] = 0xFF;
+        cpu.v[1] = 0x01;
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.v[0], 0x0);
+        assert_eq!(cpu.vf, 0x1);
+    }
+
+    // TODO: Define what should occur when overflow subtraction occurs in the CPU?
+    // Doesnt seem to be defined in the spec very clearly.
+
+    // #[test]
+    // fn sub_xy_no_borrow() {
+    //     let mut cpu = load_new_cpu_with_instruction(0x8015);
+    //     cpu.v[0] = 0xF0;
+    //     cpu.v[1] = 0x10;
+
+    //     cpu.execute_next_instruction();
+
+    //     assert_eq!(cpu.v[0], 0xE0);
+    //     assert_eq!(cpu.vf, 0x1);
+    // }
+
+    // #[test]
+    // fn sub_xy_borrow() {
+    //     let mut cpu = load_new_cpu_with_instruction(0x8015);
+    //     cpu.v[0] = 0x10;
+    //     cpu.v[1] = 0x20;
+
+    //     cpu.execute_next_instruction();
+
+    //     assert_eq!(cpu.v[0], 0x0);
+    //     assert_eq!(cpu.vf, 0x0);
+    // }
+
+    // TODO: Same as previous sub_xy tests
+    // Need to define behavior more fully.
+    // #[test]
+    // fn subn() {}
+
+    #[test]
+    fn shr() {
+        let mut cpu = load_new_cpu_with_instruction(0x8006);
+        cpu.v[0] = 0x08;
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.v[0], 0x4);
+    }
+
+    #[test]
+    fn shr_vf_set_when_odd() {
+        let mut cpu = load_new_cpu_with_instruction(0x8006);
+        cpu.v[0] = 0x09;
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.v[0], 0x4);
+        assert_eq!(cpu.vf, 0x1);
+    }
+
+    // TODO: Define SHL behavior when Vx > 128
+    // Again, more behavior that im unsure what is actually expected
+    // SHL when used on a numbe > 128 will result in a 8-bit number overflow
+    // What should happen here? shitcan the bits? use set it to 255?
+    // #[test]
+    // fn shl() {
+    //     let mut cpu = load_new_cpu_with_instruction(0x800E);
+    //     cpu.v[0] = 0x08;
+
+    //     cpu.execute_next_instruction();
+
+    //     assert_eq!(cpu.v[0], 0x10);
+    // }
+
+    // #[test]
+    // fn shl_vf_set_when_over_128() {
+    //     let mut cpu = load_new_cpu_with_instruction(0x800E);
+    //     cpu.v[0] = 0b10001111;
+
+    //     cpu.execute_next_instruction();
+
+    //     assert_eq!(cpu.v[0], 0x10);
+    // }
+
+    #[test]
+    fn sne_xy_skip_when_not_equal() {
+        let mut cpu = load_new_cpu_with_instruction(0x9010);
+        cpu.v[0] = 0x08;
+        cpu.v[1] = 0x80;
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.pc, 0x204);
+    }
+
+    #[test]
+    fn sne_xy_dont_skip_when_equal() {
+        let mut cpu = load_new_cpu_with_instruction(0x9010);
+        cpu.v[0] = 0x08;
+        cpu.v[1] = 0x08;
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.pc, 0x202);
+    }
+
+    #[test]
+    fn ld_i() {
+        let mut cpu = load_new_cpu_with_instruction(0xA666);
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.vi, 0x666);
+    }
+
+    #[test]
+    fn jp_v0() {
+        let mut cpu = load_new_cpu_with_instruction(0xB666);
+        cpu.v[0] = 0x4;
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.pc, 0x66A);
+    }
+
+    // TODO: PEPELAUGH somehow deal with the rng.
+    // #[test]
+    // fn rnd() {
+    //     let mut cpu = load_new_cpu_with_instruction(0xC066);
+    //     cpu.v[0] = 0x4;
+
+    //     cpu.execute_next_instruction();
+
+    //     assert_eq!(cpu.pc, 0x66A);
+    // }
 }

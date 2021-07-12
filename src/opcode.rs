@@ -51,17 +51,17 @@ mod tests {
 
     #[test]
     fn should_generate_correct_raw_value() {
-        assert!(OpCode::new(0x1234).raw() == 0x1234);
+        assert_eq!(OpCode::new(0x1234).raw(), 0x1234);
     }
 
     #[test]
     fn should_generate_correct_id_value() {
-        assert!(OpCode::new(0x1234).id() == 0x1);
+        assert_eq!(OpCode::new(0x1234).id(), 0x1);
     }
 
     #[test]
     fn should_generate_correct_x_value() {
-        assert!(OpCode::new(0x1234).x() == 0x2);
+        assert_eq!(OpCode::new(0x1234).x(), 0x2);
     }
 
     #[test]
@@ -69,16 +69,16 @@ mod tests {
         let op = OpCode::new(0x1234).y();
         dbg!(op);
 
-        assert!(OpCode::new(0x1234).y() == 0x3);
+        assert_eq!(OpCode::new(0x1234).y(), 0x3);
     }
 
     #[test]
     fn should_generate_correct_kk_value() {
-        assert!(OpCode::new(0x1234).kk() == 0x34);
+        assert_eq!(OpCode::new(0x1234).kk(), 0x34);
     }
 
     #[test]
     fn should_generate_correct_nnn_value() {
-        assert!(OpCode::new(0x1234).nnn() == 0x234);
+        assert_eq!(OpCode::new(0x1234).nnn(), 0x234);
     }
 }
