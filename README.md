@@ -1,13 +1,13 @@
 # Chip-8 Emulator in _RUST_
 Yet another Chip-8 emulator - this time in _RUST_ 🦀.
-WHAT A CONCEPT.
+_WHAT A CONCEPT._
 
-The spec was based on the brilliant document from [Cowgods brilliantly clear specification](http://devernay.free.fr/hacks/chip8/C8TECH10.HTM#2.1)
+The spec was based on the brilliant document from [Cowgods neato specification](http://devernay.free.fr/hacks/chip8/C8TECH10.HTM#2.1)
 
 ## Implemented
 - Most of the instructions.
 - - The remaining instructions are used for keyboard actions, timers, drawin to the display, and reading memory locations.
-- - Remaining Instructions:
+- - Remaining Instructions to be implemented:
 - - - Dxyn - DRW Vx, Vy, nibble
 - - - Ex9E - SKP Vx
 - - - ExA1 - SKNP Vx

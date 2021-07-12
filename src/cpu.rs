@@ -107,6 +107,7 @@ impl CPU {
         let b = self.memory.get(self.pc as _) as u16;
         self.pc += 1;
 
+        dbg!(a, b);
         Some(OpCode::new((a | b) as u16))
     }
 
