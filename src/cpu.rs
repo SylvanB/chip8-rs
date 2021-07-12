@@ -92,7 +92,7 @@ impl CPU {
             0xc000..=0xcfff => self.rnd(&op),
             0xd000..=0xdfff => todo!(),
             0xe000..=0xefff => todo!(),
-            0xf000..=0xffff => todo!(),
+            0xf000..=0xffff => self.ops_f(&op),
             _ => {} // no-op
         };
     }
@@ -199,6 +199,46 @@ impl CPU {
         } else if op.raw() & 0x000F == 0xE {
             self.shl(&op);
         } else {
+        }
+    }
+
+    fn ops_f(&mut self, op: &OpCode) {
+        if op.raw() & 0x00FF == 0x1E {
+            self.add_i(&op);
+        } else if op.raw() & 0x00FF == 0x29 {
+            todo!();
+        } else if op.raw() & 0x00FF == 0x33 {
+            self.ld_b(&op);
+        } else if op.raw() & 0x00FF == 0x55 {
+            self.ld_mem_i(&op);
+        }
+    }
+
+    /// The values of I and Vx are added, and the results are stored in I.
+    fn add_i(&mut self, op: &OpCode) {
+        self.vi += self.v[op.x() as usize] as u16;
+    }
+
+    /// Stores the BCD representation of the number in Vx in memory locations Vi, Vi + 1, Vi + 2
+    fn ld_b(&mut self, op: &OpCode) {
+        let value = self.v[op.x() as usize];
+        let hund = (value / 100) % 10;
+        let tens = (value / 10) % 10;
+        let ones = value % 10;
+
+        let addr = self.vi;
+        self.memory.write(addr as usize, hund);
+        self.memory.write((addr + 1) as usize, tens);
+        self.memory.write((addr + 2) as usize, ones);
+    }
+
+    /// Stores the values of the register in the range 0..=Vx starting at the address pointed at by Vi.
+    fn ld_mem_i(&mut self, op: &OpCode) {
+        let max = op.x();
+
+        for x in 0..=max {
+            let val = self.v[x as usize];
+            self.memory.write((self.vi + (x as u16)) as usize, val);
         }
     }
 
@@ -704,4 +744,47 @@ mod tests {
 
     //     assert_eq!(cpu.pc, 0x66A);
     // }
+
+    #[test]
+    fn add_i() {
+        let mut cpu = load_new_cpu_with_instruction(0xF01E);
+        cpu.vi = 0x6;
+        cpu.v[0] = 0x4;
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.vi, 0xA);
+    }
+
+    #[test]
+    fn ld_b() {
+        let mut cpu = load_new_cpu_with_instruction(0xF033);
+        cpu.vi = 0x600;
+        cpu.v[0] = 123;
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.memory.get(0x600), 1);
+        assert_eq!(cpu.memory.get(0x601), 2);
+        assert_eq!(cpu.memory.get(0x602), 3);
+    }
+
+    #[test]
+    fn ld_mem_i() {
+        let mut cpu = load_new_cpu_with_instruction(0xF455);
+        cpu.vi = 0x600;
+        cpu.v[0] = 0x1;
+        cpu.v[1] = 0x2;
+        cpu.v[2] = 0x3;
+        cpu.v[3] = 0x4;
+        cpu.v[4] = 0x5;
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.memory.get(0x600), 0x1);
+        assert_eq!(cpu.memory.get(0x601), 0x2);
+        assert_eq!(cpu.memory.get(0x602), 0x3);
+        assert_eq!(cpu.memory.get(0x603), 0x4);
+        assert_eq!(cpu.memory.get(0x604), 0x5);
+    }
 }

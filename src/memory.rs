@@ -23,6 +23,10 @@ impl Memory {
         self.data[index + 1] = (ins & 0x00FF) as u8;
     }
 
+    pub fn write(&mut self, index: usize, val: u8) {
+        self.data[index] = val;
+    }
+
     pub fn get(&self, index: usize) -> u8 {
         // TODO: Support ETI_600 offset
         // TODO: Handle this error better - maybe return some Result variant.
