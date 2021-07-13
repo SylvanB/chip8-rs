@@ -40,10 +40,17 @@ fn main() {
     cpu.execute_next_instruction();
     cpu.view_state();
 
-    cpu.memory.view_state();
+    // cpu.memory.view_state();
 
-    println!("Value of register V0: 0x{:x}", cpu.v[0]);
-    println!("Value of register V1: 0x{:x}", cpu.v[1]);
-    println!("Value of register V2: 0x{:x}", cpu.v[2]);
-    println!("Value of register V3: 0x{:x}", cpu.v[3]);
+    cpu.display
+        .display_sprite((&60, &29), &[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]);
+
+    cpu.display.display_sprite((&28, &15), &[0xFF, 0b01010101]);
+
+    cpu.display.view_state();
+
+    // println!("Value of register V0: 0x{:x}", cpu.v[0]);
+    // println!("Value of register V1: 0x{:x}", cpu.v[1]);
+    // println!("Value of register V2: 0x{:x}", cpu.v[2]);
+    // println!("Value of register V3: 0x{:x}", cpu.v[3]);
 }
