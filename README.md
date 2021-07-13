@@ -8,7 +8,6 @@ The spec was based on the brilliant document from [Cowgods neato specification](
 - Most of the instructions.
 - The remaining instructions are used for keyboard actions, timers, drawin to the display, and reading memory locations.
   - Remaining Instructions to be implemented:
-  - Dxyn - DRW Vx, Vy, nibble
     - Ex9E - SKP Vx
     - ExA1 - SKNP Vx
     - Fx07 - LD Vx, DT
@@ -24,7 +23,9 @@ The spec was based on the brilliant document from [Cowgods neato specification](
 - Implement the rest of the instructions
 - Implement a display
   - For the emulators output
+    - WIP: Able to write sprites from arbitary memory locations to display using `drw` instruction
   - For viewing the internal state of the CPU
+    - Semi-completed. Currently able to view internal state of Memory/Display/CPU via `DebugDisplay.view_state()`
 - Support for the timers
 - Support for the Chip-8 16 key keyboard
 - Execution control
