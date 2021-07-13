@@ -43,9 +43,10 @@ fn main() {
     // cpu.memory.view_state();
 
     cpu.display
-        .display_sprite((&60, &29), &[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]);
+        .display_sprite((&23, &4), &[0xF0, 0x80, 0xF0, 0x90, 0xF0]);
 
-    cpu.display.display_sprite((&28, &15), &[0xFF, 0b01010101]);
+    cpu.display
+        .display_sprite((&28, &4), &[0xF0, 0x90, 0xF0, 0x10, 0xF0]);
 
     cpu.display.view_state();
 
