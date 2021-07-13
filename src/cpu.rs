@@ -94,7 +94,7 @@ impl CPU {
             0xa000..=0xafff => self.ld_i(&op),
             0xb000..=0xbfff => self.jp_v0(&op),
             0xc000..=0xcfff => self.rnd(&op),
-            0xd000..=0xdfff => todo!(),
+            0xd000..=0xdfff => self.drw(&op),
             0xe000..=0xefff => todo!(),
             0xf000..=0xffff => self.ops_f(&op),
             _ => {} // no-op
@@ -396,7 +396,19 @@ impl CPU {
         self.v[x as usize] = res;
     }
 
-    fn drw(&mut self, op: &OpCode) {}
+    fn drw(&mut self, op: &OpCode) {
+        let x = op.x();
+        let y = op.y();
+        let n = (op.raw() & 0x000F) as u8;
+
+        let mut sprite = vec![0; n as _];
+
+        for x in 0..n {
+            sprite[x as usize] = self.memory.get((self.vi + (x as u16)) as _);
+        }
+
+        self.vf = self.display.display_sprite((&x, &y), &sprite) as u8;
+    }
 }
 
 impl DebugDisplay for CPU {
