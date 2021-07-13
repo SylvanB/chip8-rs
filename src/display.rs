@@ -24,12 +24,15 @@ impl Display {
 
         let mut did_overwrite = false;
         let mut y_offset = 0;
+
         for spr_row in sprite {
             for n in 0..8 {
                 // calculate if we need to wrap around
                 // part of the sprite
                 let mut curr_y = *y as usize + y_offset;
-                let mut curr_x = *x as usize + n;
+                // In order to render the pixels in the correct order
+                // we must print the most significant byte to the display first
+                let mut curr_x = *x as usize + (8 - n);
                 if curr_y >= SCREEN_HEIGHT {
                     curr_y %= SCREEN_HEIGHT;
                 }
@@ -62,7 +65,8 @@ impl DebugDisplay for Display {
     fn view_state(&self) {
         for r in self.screen {
             for x in r {
-                print!("{}", x as u8);
+                let p = if !x { "x" } else { " " };
+                print!("{}", p);
             }
             println!("");
         }
