@@ -1,3 +1,5 @@
+use crate::display::DebugDisplay;
+
 // 4KB of RAM for the CPU
 pub(crate) const MAX_MEM: usize = 0x1000;
 
@@ -36,5 +38,22 @@ impl Memory {
 
         // TODO: Remove this unwrap
         *self.data.get(index).unwrap()
+    }
+}
+
+impl DebugDisplay for Memory {
+    fn view_state(&self) {
+        let mut r = 0;
+        print!("{:02x}: ", r);
+        for i in 0..MAX_MEM {
+            if i % 0x10 == 0 && i != 0 {
+                r += 1;
+                println!("");
+                print!("{:02x}: ", r);
+            }
+
+            print!("{:02x} ", self.data[i]);
+        }
+        println!("");
     }
 }

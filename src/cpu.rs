@@ -1,6 +1,10 @@
 use rand::Rng;
 
-use crate::{display::Display, memory::Memory, opcode::OpCode};
+use crate::{
+    display::{DebugDisplay, Display},
+    memory::Memory,
+    opcode::OpCode,
+};
 
 #[derive(Debug)]
 pub(crate) struct CPU {
@@ -107,7 +111,6 @@ impl CPU {
         let b = self.memory.get(self.pc as _) as u16;
         self.pc += 1;
 
-        dbg!(a, b);
         Some(OpCode::new((a | b) as u16))
     }
 
@@ -129,7 +132,6 @@ impl CPU {
 
     /// Jumps to a given memory location
     fn jp(&mut self, op: &OpCode) {
-        dbg!(op.nnn());
         self.pc = op.nnn();
     }
 
@@ -397,6 +399,16 @@ impl CPU {
     fn drw(&mut self, op: &OpCode) {}
 }
 
+impl DebugDisplay for CPU {
+    fn view_state(&self) {
+        println!("Registers:");
+        println!("{:#x?}", self.v);
+        println!("vf: {:#x?} vi: {:#x?}", self.vf, self.vi);
+        println!("pc: {:#x?} sp: {:#x?}", self.pc, self.sp);
+        println!("");
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{display::Display, memory::Memory};
@@ -412,7 +424,6 @@ mod tests {
         cpu.memory.data[0x200] = ((op & 0xFF00) >> 8) as u8;
         cpu.memory.data[0x201] = (op & 0x00FF) as u8;
 
-        dbg!(cpu.memory.data[0x200], cpu.memory.data[0x201]);
         cpu
     }
 

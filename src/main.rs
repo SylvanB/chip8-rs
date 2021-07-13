@@ -1,4 +1,8 @@
-use crate::{cpu::CPU, display::Display, memory::Memory};
+use crate::{
+    cpu::CPU,
+    display::{DebugDisplay, Display},
+    memory::Memory,
+};
 
 mod cpu;
 mod memory;
@@ -14,20 +18,29 @@ fn main() {
     println!("~ Iniitialising Chip-8 ~");
 
     let display = Display::initialise();
-    let mut memory = Memory::initialise();
+    let memory = Memory::initialise();
     let mut cpu = CPU::initialise(memory, display);
 
     cpu.memory.insert_instruction(0x200, 0x6033);
     cpu.execute_next_instruction();
+    cpu.view_state();
 
     cpu.memory.insert_instruction(0x202, 0x6144);
     cpu.execute_next_instruction();
+    cpu.view_state();
 
     cpu.memory.insert_instruction(0x204, 0x6255);
     cpu.execute_next_instruction();
+    cpu.view_state();
 
     cpu.memory.insert_instruction(0x206, 0x6366);
     cpu.execute_next_instruction();
+    cpu.view_state();
+
+    cpu.execute_next_instruction();
+    cpu.view_state();
+
+    cpu.memory.view_state();
 
     println!("Value of register V0: 0x{:x}", cpu.v[0]);
     println!("Value of register V1: 0x{:x}", cpu.v[1]);

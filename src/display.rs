@@ -12,8 +12,23 @@ impl Display {
 
     pub fn clear_screen(&mut self) {
         self.screen = [[0; 32]; 64];
-        Display::redraw();
+        Display::draw();
     }
 
-    fn redraw() {}
+    fn draw() {}
+}
+
+impl DebugDisplay for Display {
+    fn view_state(&self) {
+        for r in self.screen {
+            for x in r {
+                print!("{:02x}", x);
+            }
+            println!("");
+        }
+    }
+}
+
+pub(crate) trait DebugDisplay {
+    fn view_state(&self);
 }
