@@ -3,7 +3,7 @@ pub(crate) const SCREEN_HEIGHT: usize = 32;
 
 #[derive(Debug)]
 pub(crate) struct Display {
-    screen: [[bool; SCREEN_WIDTH]; SCREEN_HEIGHT],
+    pub screen: [[bool; SCREEN_WIDTH]; SCREEN_HEIGHT],
 }
 
 impl Display {
@@ -27,12 +27,14 @@ impl Display {
 
         for spr_row in sprite {
             for n in 0..8 {
-                // calculate if we need to wrap around
-                // part of the sprite
                 let mut curr_y = *y as usize + y_offset;
+
                 // In order to render the pixels in the correct order
                 // we must print the most significant byte to the display first
-                let mut curr_x = *x as usize + (8 - n);
+                let mut curr_x = *x as usize + (7 - n);
+
+                // calculate if we need to wrap around
+                // part of the sprite
                 if curr_y >= SCREEN_HEIGHT {
                     curr_y %= SCREEN_HEIGHT;
                 }
@@ -65,7 +67,7 @@ impl DebugDisplay for Display {
     fn view_state(&self) {
         for r in self.screen {
             for x in r {
-                let p = if !x { "x" } else { " " };
+                let p = if !x { "." } else { "X" };
                 print!("{}", p);
             }
             println!("");
