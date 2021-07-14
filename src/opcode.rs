@@ -66,9 +66,6 @@ mod tests {
 
     #[test]
     fn should_generate_correct_y_value() {
-        let op = OpCode::new(0x1234).y();
-        dbg!(op);
-
         assert_eq!(OpCode::new(0x1234).y(), 0x3);
     }
 
