@@ -423,7 +423,10 @@ impl DebugDisplay for CPU {
 
 #[cfg(test)]
 mod tests {
-    use crate::{display::Display, memory::Memory};
+    use crate::{
+        display::{DebugDisplay, Display},
+        memory::Memory,
+    };
 
     use super::CPU;
 
@@ -768,6 +771,27 @@ mod tests {
 
     //     assert_eq!(cpu.pc, 0x66A);
     // }
+
+    #[test]
+    fn drw() {
+        let mut cpu = get_cpu();
+
+        cpu.memory.data[0x600] = 0xFF;
+        cpu.vi = 0x600;
+        cpu.memory.insert_instruction(0x200, 0xD111);
+
+        cpu.execute_next_instruction();
+        cpu.display.view_state();
+
+        assert_eq!(cpu.display.screen[1][1], true);
+        assert_eq!(cpu.display.screen[1][2], true);
+        assert_eq!(cpu.display.screen[1][3], true);
+        assert_eq!(cpu.display.screen[1][4], true);
+        assert_eq!(cpu.display.screen[1][5], true);
+        assert_eq!(cpu.display.screen[1][6], true);
+        assert_eq!(cpu.display.screen[1][7], true);
+        assert_eq!(cpu.display.screen[1][8], true);
+    }
 
     #[test]
     fn add_i() {

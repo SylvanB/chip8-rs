@@ -48,6 +48,8 @@ fn main() {
     cpu.display
         .display_sprite((&28, &4), &[0xF0, 0x90, 0xF0, 0x10, 0xF0]);
 
+    cpu.display.display_sprite((&0, &0), &[0xFF]);
+
     cpu.display.view_state();
 
     // println!("Value of register V0: 0x{:x}", cpu.v[0]);
