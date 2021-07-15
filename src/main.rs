@@ -1,8 +1,10 @@
 use crate::{
     cpu::CPU,
-    display::{DebugDisplay, Display},
+    display::{DebugDisplay, Display, SCREEN_HEIGHT, SCREEN_WIDTH},
     memory::Memory,
 };
+use minifb::{Key, Window, WindowOptions};
+use rand::Rng;
 
 mod cpu;
 mod memory;
@@ -17,43 +19,57 @@ mod keyboard;
 fn main() {
     println!("~ Iniitialising Chip-8 ~");
 
-    let display = Display::initialise();
     let memory = Memory::initialise();
+    let display = Display::initialise();
     let mut cpu = CPU::initialise(memory, display);
 
-    cpu.memory.insert_instruction(0x200, 0x6033);
-    cpu.execute_next_instruction();
-    cpu.view_state();
+    // 6 sprite
+    cpu.memory.data[0x600] = 0xF0;
+    cpu.memory.data[0x601] = 0x80;
+    cpu.memory.data[0x602] = 0xF0;
+    cpu.memory.data[0x603] = 0x90;
+    cpu.memory.data[0x604] = 0xF0;
 
-    cpu.memory.insert_instruction(0x202, 0x6144);
-    cpu.execute_next_instruction();
-    cpu.view_state();
+    // 9 sprite
+    cpu.memory.data[0x605] = 0xF0;
+    cpu.memory.data[0x606] = 0x90;
+    cpu.memory.data[0x607] = 0xF0;
+    cpu.memory.data[0x608] = 0x10;
+    cpu.memory.data[0x609] = 0xF0;
 
-    cpu.memory.insert_instruction(0x204, 0x6255);
-    cpu.execute_next_instruction();
-    cpu.view_state();
+    cpu.memory.insert_instruction(0x200, 0xA600);
+    cpu.memory.insert_instruction(0x202, 0xD255);
+    cpu.memory.insert_instruction(0x204, 0xA605);
+    cpu.memory.insert_instruction(0x206, 0xD755);
+    cpu.memory.insert_instruction(0x208, 0x1200);
 
-    cpu.memory.insert_instruction(0x206, 0x6366);
-    cpu.execute_next_instruction();
-    cpu.view_state();
+    let mut window = Window::new(
+        "Chip8.rs - ESC to exit",
+        SCREEN_WIDTH,
+        SCREEN_HEIGHT,
+        WindowOptions {
+            borderless: false,
+            title: true,
+            resize: false,
+            scale: minifb::Scale::X8,
+            scale_mode: minifb::ScaleMode::Stretch,
+            topmost: false,
+            transparency: false,
+            none: false,
+        },
+    )
+    .unwrap_or_else(|e| {
+        panic!("{}", e);
+    });
 
-    cpu.execute_next_instruction();
-    cpu.view_state();
+    // Limit to max ~60 fps update rate
+    window.limit_update_rate(Some(std::time::Duration::from_micros(16600)));
 
-    // cpu.memory.view_state();
+    while window.is_open() && !window.is_key_down(Key::Escape) {
+        cpu.execute_next_instruction();
 
-    cpu.display
-        .display_sprite((&23, &4), &[0xF0, 0x80, 0xF0, 0x90, 0xF0]);
-
-    cpu.display
-        .display_sprite((&28, &4), &[0xF0, 0x90, 0xF0, 0x10, 0xF0]);
-
-    cpu.display.display_sprite((&0, &0), &[0xFF]);
-
-    cpu.display.view_state();
-
-    // println!("Value of register V0: 0x{:x}", cpu.v[0]);
-    // println!("Value of register V1: 0x{:x}", cpu.v[1]);
-    // println!("Value of register V2: 0x{:x}", cpu.v[2]);
-    // println!("Value of register V3: 0x{:x}", cpu.v[3]);
+        window
+            .update_with_buffer(&cpu.display.get_buffer(), SCREEN_WIDTH, SCREEN_HEIGHT)
+            .unwrap();
+    }
 }

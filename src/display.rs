@@ -18,8 +18,17 @@ impl Display {
         Display::draw();
     }
 
+    pub fn get_buffer(&self) -> Vec<u32> {
+        self.screen
+            .iter()
+            .flatten()
+            // .map(|x| if *x { 0x0 as u32 } else { 0xFFFFFFFF as u32 })
+            .map(|x| if *x { 0x0 as u32 } else { 0xFFFFFFFF as u32 })
+            .collect()
+    }
+
     // TODO: Write tests for this
-    pub fn display_sprite(&mut self, location: (&u8, &u8), sprite: &[u8]) -> bool {
+    pub fn display_sprite(&mut self, location: (&usize, &usize), sprite: &[u8]) -> bool {
         let (x, y) = location;
 
         let mut did_overwrite = false;
@@ -27,11 +36,11 @@ impl Display {
 
         for spr_row in sprite {
             for n in 0..8 {
-                let mut curr_y = *y as usize + y_offset;
+                let mut curr_y = *y + y_offset;
 
                 // In order to render the pixels in the correct order
                 // we must print the most significant byte to the display first
-                let mut curr_x = *x as usize + (7 - n);
+                let mut curr_x = *x + (7 - n);
 
                 // calculate if we need to wrap around
                 // part of the sprite
