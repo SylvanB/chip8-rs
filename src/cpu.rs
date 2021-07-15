@@ -407,7 +407,9 @@ impl CPU {
             sprite[x as usize] = self.memory.get((self.vi + (x as u16)) as _);
         }
 
-        self.vf = self.display.display_sprite((&x, &y), &sprite) as u8;
+        self.vf = self
+            .display
+            .display_sprite((&(x as usize), &(y as usize)), &sprite) as u8;
     }
 }
 
