@@ -104,7 +104,7 @@ where
             0xb000..=0xbfff => self.jp_v0(&op),
             0xc000..=0xcfff => self.rnd(&op),
             0xd000..=0xdfff => self.drw(&op),
-            0xe000..=0xefff => todo!(),
+            0xe000..=0xefff => self.ops_e(&op),
             0xf000..=0xffff => self.ops_f(&op),
             _ => {} // no-op
         };
@@ -121,6 +121,15 @@ where
         self.pc += 1;
 
         Some(OpCode::new((a | b) as u16))
+    }
+
+    fn ops_e(&mut self, op: &OpCode) {
+        if op.raw() & 0x00FF == 0x9E {
+            self.skp_vx(op);
+        } else if op.raw() & 0x00FF == 0xA1 {
+            self.sknp_vx(op);
+        } else {
+        }
     }
 
     /// Asks the Display to clear the screen
@@ -412,13 +421,39 @@ where
 
         let mut sprite = vec![0; n as _];
 
-        for x in 0..n {
-            sprite[x as usize] = self.memory.get((self.vi + (x as u16)) as _);
+        for i in 0..n {
+            sprite[i as usize] = self.memory.get((self.vi + (i as u16)) as _);
         }
 
         self.vf = self
             .display
             .display_sprite((&(x as usize), &(y as usize)), &sprite) as u8;
+    }
+
+    fn skp_vx(&mut self, op: &OpCode) {
+        let vx = self.v[op.x() as usize];
+
+        if self
+            .keyboard
+            .get_current_keydowns()
+            .iter()
+            .any(|&k| k == vx)
+        {
+            self.pc += 2;
+        }
+    }
+
+    fn sknp_vx(&mut self, op: &OpCode) {
+        let vx = self.v[op.x() as usize];
+
+        if self
+            .keyboard
+            .get_current_keydowns()
+            .iter()
+            .all(|&k| k != vx)
+        {
+            self.pc += 2;
+        }
     }
 }
 
@@ -853,5 +888,53 @@ mod tests {
         assert_eq!(cpu.memory.get(0x602), 0x3);
         assert_eq!(cpu.memory.get(0x603), 0x4);
         assert_eq!(cpu.memory.get(0x604), 0x5);
+    }
+
+    #[test]
+    fn skp_vx_skip_if_pressed() {
+        let mut cpu = load_new_cpu_with_instruction(0xE09E);
+        cpu.v[0] = 0x4;
+        cpu.keyboard.curr_keydowns = vec![0x4];
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.pc, 0x204);
+    }
+
+    #[test]
+    fn skp_vx_dont_skip_if_not_pressed() {
+        let mut cpu = load_new_cpu_with_instruction(0xE09E);
+        cpu.v[0] = 0x4;
+        cpu.keyboard.curr_keydowns = vec![
+            0x0, 0x1, 0x2, 0x3, 0x5, 0x6, 0x7, 0x8, 0x9, 0xA, 0xB, 0xC, 0xD, 0xE, 0xF,
+        ];
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.pc, 0x202);
+    }
+
+    #[test]
+    fn sknp_vx_skip_if_not_pressed() {
+        let mut cpu = load_new_cpu_with_instruction(0xE0A1);
+        cpu.v[0] = 0x4;
+        cpu.keyboard.curr_keydowns = vec![
+            0x0, 0x1, 0x2, 0x3, 0x5, 0x6, 0x7, 0x8, 0x9, 0xA, 0xB, 0xC, 0xD, 0xE, 0xF,
+        ];
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.pc, 0x204);
+    }
+
+    #[test]
+    fn sknp_vx_dont_skip_if_pressed() {
+        let mut cpu = load_new_cpu_with_instruction(0xE0A1);
+        cpu.v[0] = 0x4;
+        cpu.keyboard.curr_keydowns = vec![0x4];
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.pc, 0x202);
     }
 }
