@@ -17,7 +17,9 @@ pub(crate) struct Memory {
 
 impl Memory {
     pub fn initialise() -> Self {
-        let memory = Memory { data: [0; MAX_MEM] };
+        let mut memory = Memory { data: [0; MAX_MEM] };
+
+        memory.setup_digit_sprites();
 
         memory
     }
@@ -173,7 +175,7 @@ impl Memory {
     pub fn get(&self, index: usize) -> u8 {
         // TODO: Support ETI_600 offset
         // TODO: Handle this error better - maybe return some Result variant.
-        if index > MAX_MEM || index < PROGRAM_START_OFFSET {
+        if index > MAX_MEM {
             panic!("Out of bound memory expcetion");
         }
 
