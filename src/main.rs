@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use crate::{
     cpu::CPU,
-    display::{Display, SCREEN_HEIGHT, SCREEN_WIDTH},
+    display::{DebugDisplay, Display, SCREEN_HEIGHT, SCREEN_WIDTH},
     keyboard::minifb_keyboard::MiniFbKeyboard,
     memory::Memory,
 };
@@ -43,25 +43,17 @@ fn main() {
     let keyboard = MiniFbKeyboard::initialise(&window);
     let mut cpu = CPU::initialise(memory, display, keyboard);
 
-    // 6 sprite
-    cpu.memory.data[0x600] = 0xF0;
-    cpu.memory.data[0x601] = 0x80;
-    cpu.memory.data[0x602] = 0xF0;
-    cpu.memory.data[0x603] = 0x90;
-    cpu.memory.data[0x604] = 0xF0;
+    // Load the value 0x06 into register V0
+    cpu.memory.insert_instruction(0x200, 0x6006);
+    // Get the memory location for the sprite for the character `6`
+    cpu.memory.insert_instruction(0x202, 0xF029);
+    // Display this sprite
+    cpu.memory.insert_instruction(0x204, 0xD005);
 
-    // 9 sprite
-    cpu.memory.data[0x605] = 0xF0;
-    cpu.memory.data[0x606] = 0x90;
-    cpu.memory.data[0x607] = 0xF0;
-    cpu.memory.data[0x608] = 0x10;
-    cpu.memory.data[0x609] = 0xF0;
-
-    cpu.memory.insert_instruction(0x200, 0xA600);
-    cpu.memory.insert_instruction(0x202, 0xD255);
-    cpu.memory.insert_instruction(0x204, 0xA605);
-    cpu.memory.insert_instruction(0x206, 0xD755);
-    cpu.memory.insert_instruction(0x208, 0x1200);
+    // Repeate the above for the character `9`
+    cpu.memory.insert_instruction(0x206, 0x6109);
+    cpu.memory.insert_instruction(0x208, 0xF129);
+    cpu.memory.insert_instruction(0x20A, 0xD505);
 
     // Limit to max ~60 fps update rate
     let mut inner_window = window.borrow_mut();
