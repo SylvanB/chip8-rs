@@ -235,7 +235,7 @@ where
         } else if op.raw() & 0x00FF == 0x1E {
             self.add_i(&op);
         } else if op.raw() & 0x00FF == 0x29 {
-            todo!();
+            self.ld_f_vx(&op);
         } else if op.raw() & 0x00FF == 0x33 {
             self.ld_b(&op);
         } else if op.raw() & 0x00FF == 0x55 {
@@ -243,6 +243,10 @@ where
         } else if op.raw() & 0x00FF == 0x65 {
             self.ld_mem_vx_i(&op);
         }
+    }
+
+    fn ld_f_vx(&mut self, op: &OpCode) {
+        self.vi = (self.v[op.x() as usize] << 4) as u16;
     }
 
     fn ld_vx_k(&mut self, op: &OpCode) {
@@ -919,6 +923,16 @@ mod tests {
         assert_eq!(cpu.memory.get(0x600), 1);
         assert_eq!(cpu.memory.get(0x601), 2);
         assert_eq!(cpu.memory.get(0x602), 3);
+    }
+
+    #[test]
+    fn ld_f_vx() {
+        let mut cpu = load_new_cpu_with_instruction(0xF029);
+        cpu.v[0] = 0xD;
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.vi, 0xD0);
     }
 
     #[test]

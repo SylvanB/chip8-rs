@@ -17,15 +17,133 @@ pub(crate) struct Memory {
 
 impl Memory {
     pub fn initialise() -> Self {
-        Memory { data: [0; MAX_MEM] }
+        let memory = Memory { data: [0; MAX_MEM] };
+
+        memory
+    }
+
+    fn setup_digit_sprites(&mut self) {
+        // Yes we are wasting alot of bytes here.
+        // No I dont care.
+        // No I wont fix it.
+        // its for my own sanity of remembering where the hell the sprites are.
+
+        // 0
+        self.data[0x0] = 0xF0;
+        self.data[0x1] = 0x90;
+        self.data[0x2] = 0x90;
+        self.data[0x3] = 0x90;
+        self.data[0x4] = 0xF0;
+
+        // 1
+        self.data[0x10] = 0x20;
+        self.data[0x11] = 0x60;
+        self.data[0x12] = 0x20;
+        self.data[0x13] = 0x20;
+        self.data[0x14] = 0x70;
+
+        // 2
+        self.data[0x20] = 0xF0;
+        self.data[0x21] = 0x10;
+        self.data[0x22] = 0xF0;
+        self.data[0x23] = 0x80;
+        self.data[0x24] = 0xF0;
+
+        // 3
+        self.data[0x30] = 0xF0;
+        self.data[0x31] = 0x10;
+        self.data[0x32] = 0xF0;
+        self.data[0x33] = 0x10;
+        self.data[0x34] = 0xF0;
+
+        // 4
+        self.data[0x40] = 0x90;
+        self.data[0x41] = 0x90;
+        self.data[0x42] = 0xF0;
+        self.data[0x43] = 0x10;
+        self.data[0x44] = 0x10;
+
+        // 5
+        self.data[0x50] = 0xF0;
+        self.data[0x51] = 0x80;
+        self.data[0x52] = 0xF0;
+        self.data[0x53] = 0x10;
+        self.data[0x54] = 0xF0;
+
+        // 6
+        self.data[0x60] = 0xF0;
+        self.data[0x61] = 0x80;
+        self.data[0x62] = 0xF0;
+        self.data[0x63] = 0x90;
+        self.data[0x64] = 0xF0;
+
+        // 7
+        self.data[0x70] = 0xF0;
+        self.data[0x71] = 0x10;
+        self.data[0x72] = 0x20;
+        self.data[0x73] = 0x40;
+        self.data[0x74] = 0x40;
+
+        // 8
+        self.data[0x80] = 0xF0;
+        self.data[0x81] = 0x90;
+        self.data[0x82] = 0xF0;
+        self.data[0x83] = 0x90;
+        self.data[0x84] = 0xF0;
+
+        // 9
+        self.data[0x90] = 0xF0;
+        self.data[0x91] = 0x90;
+        self.data[0x92] = 0xF0;
+        self.data[0x93] = 0x10;
+        self.data[0x94] = 0xF0;
+
+        // 10 / 0xA
+        self.data[0xA0] = 0xF0;
+        self.data[0xA1] = 0x90;
+        self.data[0xA2] = 0xF0;
+        self.data[0xA3] = 0x90;
+        self.data[0xA4] = 0x90;
+
+        // 11 / 0xA
+        self.data[0xB0] = 0xE0;
+        self.data[0xB1] = 0x90;
+        self.data[0xB2] = 0xE0;
+        self.data[0xB3] = 0x90;
+        self.data[0xB4] = 0xE0;
+
+        // 12 / 0xC
+        self.data[0xC0] = 0xF0;
+        self.data[0xC1] = 0x80;
+        self.data[0xC2] = 0x80;
+        self.data[0xC3] = 0x80;
+        self.data[0xC4] = 0xF0;
+
+        // 13 / 0xD
+        self.data[0xD0] = 0xE0;
+        self.data[0xD1] = 0x90;
+        self.data[0xD2] = 0x90;
+        self.data[0xD3] = 0x90;
+        self.data[0xD4] = 0xE0;
+
+        // 14 / 0xE
+        self.data[0xE0] = 0xF0;
+        self.data[0xE1] = 0x80;
+        self.data[0xE2] = 0xF0;
+        self.data[0xE3] = 0x80;
+        self.data[0xE4] = 0xF0;
+
+        // 15 / 0xF
+        self.data[0xF0] = 0xF0;
+        self.data[0xF1] = 0x80;
+        self.data[0xF2] = 0xF0;
+        self.data[0xF3] = 0x80;
+        self.data[0xF4] = 0x80;
     }
 
     pub fn initialise_from_file(file: &str) -> Self {
         // TODO: Handle this nicely
-        // let data = [0x0; MAX_MEM];
-        let mut memory = Self {
-            data: [0x0; MAX_MEM],
-        };
+        let mut memory = Self::initialise();
 
         let file = fs::read(file).unwrap();
 
