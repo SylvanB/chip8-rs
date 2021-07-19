@@ -392,18 +392,21 @@ where
         }
     }
 
+    /// Sets Vi to the value of NNN.
     fn ld_i(&mut self, op: &OpCode) {
         let addr = op.nnn();
 
         self.vi = addr;
     }
 
+    /// Jump to the location NNN + V0
     fn jp_v0(&mut self, op: &OpCode) {
         let addr = op.nnn();
 
         self.pc = (self.v[0] as u16) + addr;
     }
 
+    /// Sets Vx to a random byte AND'd with KK.
     fn rnd(&mut self, op: &OpCode) {
         let x = op.x();
         let kk = op.kk();
@@ -414,6 +417,8 @@ where
         self.v[x as usize] = res;
     }
 
+    /// Display n-byte sprite starting at memory location I at (Vx, Vy), set VF = collision.
+    /// If a sprite is going to be rendered outside the window boundries, then it will wrap around the display.
     fn drw(&mut self, op: &OpCode) {
         let x = op.x();
         let y = op.y();
@@ -430,6 +435,7 @@ where
             .display_sprite((&(x as usize), &(y as usize)), &sprite) as u8;
     }
 
+    /// Skip the next instruction if the key corresponding to the value currently in Vx is pressed.
     fn skp_vx(&mut self, op: &OpCode) {
         let vx = self.v[op.x() as usize];
 
@@ -443,6 +449,7 @@ where
         }
     }
 
+    /// Skips the next instruction if the key corresponding to the value currently in Vx is not pressed.
     fn sknp_vx(&mut self, op: &OpCode) {
         let vx = self.v[op.x() as usize];
 
