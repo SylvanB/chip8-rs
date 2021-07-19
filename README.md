@@ -8,14 +8,7 @@ The spec was based on the brilliant document from [Cowgods neato specification](
 - Most of the instructions.
 - The remaining instructions are used for keyboard actions, timers, drawin to the display, and reading memory locations.
   - Remaining Instructions to be implemented:
-    - Ex9E - SKP Vx
-    - ExA1 - SKNP Vx
-    - Fx07 - LD Vx, DT
-    - Fx0A - LD Vx, K
-    - Fx15 - LD DT, Vx
-    - Fx18 - LD ST, Vx
     - Fx29 - LD F, Vx
-    - Fx65 - LD Vx, [I]
 - Basic Memory structure
 - Basic execution of instructions
 

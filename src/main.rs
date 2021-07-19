@@ -27,14 +27,9 @@ fn main() {
             SCREEN_WIDTH,
             SCREEN_HEIGHT,
             WindowOptions {
-                borderless: false,
-                title: true,
-                resize: false,
                 scale: minifb::Scale::X8,
                 scale_mode: minifb::ScaleMode::Stretch,
-                topmost: false,
-                transparency: false,
-                none: false,
+                ..WindowOptions::default()
             },
         )
         .unwrap_or_else(|e| {

@@ -31,7 +31,7 @@ where
         This timer does nothing more than subtract 1 from the value of DT at a rate of 60Hz.
         When DT reaches 0, it deactivates."
     */
-    pub delay: u8,
+    pub delay_timer: u8,
 
     /*
         Sound timer register:
@@ -64,7 +64,7 @@ where
             v: [0; 15],
             vf: 0x0,
             vi: 0x0,
-            delay: 0x0,
+            delay_timer: 0x0,
             sound_timer: 0x0,
             pc: 0x200,
             sp: 0x0,
@@ -224,15 +224,49 @@ where
     }
 
     fn ops_f(&mut self, op: &OpCode) {
-        if op.raw() & 0x00FF == 0x1E {
+        if op.raw() & 0x00FF == 0x07 {
+            self.ld_vx_dt(&op);
+        } else if op.raw() & 0x00FF == 0x15 {
+            self.ld_dt(&op);
+        } else if op.raw() & 0x00FF == 0x18 {
+            self.ld_st(&op);
+        } else if op.raw() & 0x00FF == 0x0A {
+            self.ld_vx_k(&op);
+        } else if op.raw() & 0x00FF == 0x1E {
             self.add_i(&op);
         } else if op.raw() & 0x00FF == 0x29 {
             todo!();
         } else if op.raw() & 0x00FF == 0x33 {
             self.ld_b(&op);
         } else if op.raw() & 0x00FF == 0x55 {
-            self.ld_mem_i(&op);
+            self.ld_mem_i_vx(&op);
+        } else if op.raw() & 0x00FF == 0x65 {
+            self.ld_mem_vx_i(&op);
         }
+    }
+
+    fn ld_vx_k(&mut self, op: &OpCode) {
+        // Scuffed implementation of ld_vx_k, would ideally register some kind of callback on the keyboard?
+        // It could utilise Minifb callbacks maybe?
+        // In the meantime lets just get the first key we recognise as being pressed kekw
+        self.v[op.x() as usize] = self
+            .keyboard
+            .get_current_keydowns()
+            .first()
+            .unwrap()
+            .to_owned();
+    }
+
+    fn ld_vx_dt(&mut self, op: &OpCode) {
+        self.v[op.x() as usize] = self.delay_timer;
+    }
+
+    fn ld_st(&mut self, op: &OpCode) {
+        self.sound_timer = self.v[op.x() as usize];
+    }
+
+    fn ld_dt(&mut self, op: &OpCode) {
+        self.delay_timer = self.v[op.x() as usize];
     }
 
     /// The values of I and Vx are added, and the results are stored in I.
@@ -254,12 +288,21 @@ where
     }
 
     /// Stores the values of the register in the range 0..=Vx starting at the address pointed at by Vi.
-    fn ld_mem_i(&mut self, op: &OpCode) {
+    fn ld_mem_i_vx(&mut self, op: &OpCode) {
         let max = op.x();
 
         for x in 0..=max {
             let val = self.v[x as usize];
             self.memory.write((self.vi + (x as u16)) as usize, val);
+        }
+    }
+
+    /// Read into registers V0 through Vx from memory starting at location I.
+    fn ld_mem_vx_i(&mut self, op: &OpCode) {
+        let max = op.x();
+
+        for x in 0..=max {
+            self.v[x as usize] = self.memory.get((self.vi + (x as u16)) as usize);
         }
     }
 
@@ -879,7 +922,47 @@ mod tests {
     }
 
     #[test]
-    fn ld_mem_i() {
+    fn ld_vx_k() {
+        let mut cpu = load_new_cpu_with_instruction(0xF00A);
+        cpu.keyboard.curr_keydowns = vec![0x4];
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.v[0], 0x4);
+    }
+
+    #[test]
+    fn ld_st() {
+        let mut cpu = load_new_cpu_with_instruction(0xF018);
+        cpu.v[0] = 0x4;
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.sound_timer, 0x4);
+    }
+
+    #[test]
+    fn ld_dt() {
+        let mut cpu = load_new_cpu_with_instruction(0xF015);
+        cpu.v[0] = 0x4;
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.delay_timer, 0x4);
+    }
+
+    #[test]
+    fn ld_vx_dt() {
+        let mut cpu = load_new_cpu_with_instruction(0xF007);
+        cpu.delay_timer = 0x4;
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.v[0], 0x4);
+    }
+
+    #[test]
+    fn ld_mem_i_vx() {
         let mut cpu = load_new_cpu_with_instruction(0xF455);
         cpu.vi = 0x600;
         cpu.v[0] = 0x1;
@@ -895,6 +978,25 @@ mod tests {
         assert_eq!(cpu.memory.get(0x602), 0x3);
         assert_eq!(cpu.memory.get(0x603), 0x4);
         assert_eq!(cpu.memory.get(0x604), 0x5);
+    }
+
+    #[test]
+    fn ld_mem_vx_i() {
+        let mut cpu = load_new_cpu_with_instruction(0xF465);
+        cpu.vi = 0x600;
+        cpu.memory.write(0x600, 0x1);
+        cpu.memory.write(0x601, 0x2);
+        cpu.memory.write(0x602, 0x3);
+        cpu.memory.write(0x603, 0x4);
+        cpu.memory.write(0x604, 0x5);
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.v[0], 0x1);
+        assert_eq!(cpu.v[1], 0x2);
+        assert_eq!(cpu.v[2], 0x3);
+        assert_eq!(cpu.v[3], 0x4);
+        assert_eq!(cpu.v[4], 0x5);
     }
 
     #[test]
