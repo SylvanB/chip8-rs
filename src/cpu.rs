@@ -2,14 +2,19 @@ use rand::Rng;
 
 use crate::{
     display::{DebugDisplay, Display},
+    keyboard::Keyboard,
     memory::Memory,
     opcode::OpCode,
 };
 
 #[derive(Debug)]
-pub(crate) struct CPU {
+pub(crate) struct CPU<TKeyboard>
+where
+    TKeyboard: Keyboard,
+{
     pub memory: Memory,
     pub display: Display,
+    pub keyboard: TKeyboard,
 
     // General purpose addresses
     pub v: [u8; 15],
@@ -47,11 +52,15 @@ pub(crate) struct CPU {
     pub stack: [u16; 16],
 }
 
-impl CPU {
-    pub fn initialise(memory: Memory, display: Display) -> Self {
-        CPU {
+impl<TKeyboard> CPU<TKeyboard>
+where
+    TKeyboard: Keyboard,
+{
+    pub fn initialise(memory: Memory, display: Display, keyboard: TKeyboard) -> Self {
+        Self {
             memory,
             display,
+            keyboard,
             v: [0; 15],
             vf: 0x0,
             vi: 0x0,
@@ -413,7 +422,10 @@ impl CPU {
     }
 }
 
-impl DebugDisplay for CPU {
+impl<TKeyboard> DebugDisplay for CPU<TKeyboard>
+where
+    TKeyboard: Keyboard,
+{
     fn view_state(&self) {
         println!("Registers:");
         println!("{:#x?}", self.v);
@@ -427,16 +439,21 @@ impl DebugDisplay for CPU {
 mod tests {
     use crate::{
         display::{DebugDisplay, Display},
+        keyboard::dummy_keyboard::DummyKeyboard,
         memory::Memory,
     };
 
     use super::CPU;
 
-    fn get_cpu() -> CPU {
-        CPU::initialise(Memory::initialise(), Display::initialise())
+    fn get_cpu() -> CPU<DummyKeyboard> {
+        CPU::initialise(
+            Memory::initialise(),
+            Display::initialise(),
+            DummyKeyboard::initialise(),
+        )
     }
 
-    fn load_new_cpu_with_instruction(op: u16) -> CPU {
+    fn load_new_cpu_with_instruction(op: u16) -> CPU<DummyKeyboard> {
         let mut cpu = get_cpu();
         cpu.memory.data[0x200] = ((op & 0xFF00) >> 8) as u8;
         cpu.memory.data[0x201] = (op & 0x00FF) as u8;

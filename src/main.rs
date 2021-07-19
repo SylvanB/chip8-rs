@@ -1,10 +1,12 @@
+use std::{cell::RefCell, rc::Rc};
+
 use crate::{
     cpu::CPU,
-    display::{DebugDisplay, Display, SCREEN_HEIGHT, SCREEN_WIDTH},
+    display::{Display, SCREEN_HEIGHT, SCREEN_WIDTH},
+    keyboard::minifb_keyboard::MiniFbKeyboard,
     memory::Memory,
 };
 use minifb::{Key, Window, WindowOptions};
-use rand::Rng;
 
 mod cpu;
 mod memory;
@@ -19,9 +21,32 @@ mod keyboard;
 fn main() {
     println!("~ Iniitialising Chip-8 ~");
 
+    let window: Rc<RefCell<_>> = Rc::new(RefCell::new(
+        Window::new(
+            "Chip8.rs - ESC to exit",
+            SCREEN_WIDTH,
+            SCREEN_HEIGHT,
+            WindowOptions {
+                borderless: false,
+                title: true,
+                resize: false,
+                scale: minifb::Scale::X8,
+                scale_mode: minifb::ScaleMode::Stretch,
+                topmost: false,
+                transparency: false,
+                none: false,
+            },
+        )
+        .unwrap_or_else(|e| {
+            panic!("{}", e);
+        }),
+    ));
+
+    // let memory = Memory::initialise_from_file("./roms/test_opcode.ch8");
     let memory = Memory::initialise();
     let display = Display::initialise();
-    let mut cpu = CPU::initialise(memory, display);
+    let keyboard = MiniFbKeyboard::initialise(&window);
+    let mut cpu = CPU::initialise(memory, display, keyboard);
 
     // 6 sprite
     cpu.memory.data[0x600] = 0xF0;
@@ -43,32 +68,14 @@ fn main() {
     cpu.memory.insert_instruction(0x206, 0xD755);
     cpu.memory.insert_instruction(0x208, 0x1200);
 
-    let mut window = Window::new(
-        "Chip8.rs - ESC to exit",
-        SCREEN_WIDTH,
-        SCREEN_HEIGHT,
-        WindowOptions {
-            borderless: false,
-            title: true,
-            resize: false,
-            scale: minifb::Scale::X8,
-            scale_mode: minifb::ScaleMode::Stretch,
-            topmost: false,
-            transparency: false,
-            none: false,
-        },
-    )
-    .unwrap_or_else(|e| {
-        panic!("{}", e);
-    });
-
     // Limit to max ~60 fps update rate
-    window.limit_update_rate(Some(std::time::Duration::from_micros(16600)));
+    let mut inner_window = window.borrow_mut();
+    inner_window.limit_update_rate(Some(std::time::Duration::from_micros(16600)));
 
-    while window.is_open() && !window.is_key_down(Key::Escape) {
+    while inner_window.is_open() && !inner_window.is_key_down(Key::Escape) {
         cpu.execute_next_instruction();
-
-        window
+        // cpu.view_state();
+        inner_window
             .update_with_buffer(&cpu.display.get_buffer(), SCREEN_WIDTH, SCREEN_HEIGHT)
             .unwrap();
     }
