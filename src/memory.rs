@@ -1,3 +1,5 @@
+use std::fs;
+
 use crate::display::DebugDisplay;
 
 // 4KB of RAM for the CPU
@@ -16,6 +18,27 @@ pub(crate) struct Memory {
 impl Memory {
     pub fn initialise() -> Self {
         Memory { data: [0; MAX_MEM] }
+    }
+
+    pub fn initialise_from_file(file: &str) -> Self {
+        // TODO: Handle this nicely
+        // let data = [0x0; MAX_MEM];
+        let mut memory = Self {
+            data: [0x0; MAX_MEM],
+        };
+
+        let file = fs::read(file).unwrap();
+
+        let mut i = 0x200;
+        for b in file {
+            if i > MAX_MEM {
+                break;
+            }
+            memory.data[i] = b;
+            i += 1;
+        }
+
+        memory
     }
 
     pub fn insert_instruction(&mut self, index: usize, ins: u16) {
