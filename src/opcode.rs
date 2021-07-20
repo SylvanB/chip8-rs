@@ -1,5 +1,5 @@
 #[derive(Debug)]
-pub(crate) struct OpCode {
+pub struct OpCode {
     inner: u16,
     id: u8,
     x: u8,

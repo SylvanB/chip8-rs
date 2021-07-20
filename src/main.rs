@@ -6,11 +6,12 @@ use crate::{
     keyboard::minifb_keyboard::MiniFbKeyboard,
     memory::Memory,
 };
+use clap::{load_yaml, App};
 use minifb::{Key, Window, WindowOptions};
 
 mod cpu;
 mod memory;
-mod opcode;
+pub mod opcode;
 
 // TODO: Implement these
 mod display;
@@ -19,7 +20,8 @@ mod keyboard;
 // Chip-8 CPU based on Cowgod's Technical Spec for Chip-8
 // http://devernay.free.fr/hacks/chip8/C8TECH10.HTM
 fn main() {
-    println!("~ Iniitialising Chip-8 ~");
+    let yaml = load_yaml!("../cli.yml");
+    let matches = App::from_yaml(yaml).get_matches();
 
     let window: Rc<RefCell<_>> = Rc::new(RefCell::new(
         Window::new(
@@ -37,44 +39,13 @@ fn main() {
         }),
     ));
 
-    // let memory = Memory::initialise_from_file("./roms/69.ch8");
-    // let memory = Memory::initialise_from_file("./roms/test_opcode.ch8");
-    let memory = Memory::initialise_from_file("./roms/BC_test.ch8");
-    // let memory = Memory::initialise_from_file("./roms/stars.ch8");
-    // let memory = Memory::initialise_from_file("./roms/life.ch8");
-
-    // let memory = Memory::initialise();
+    let memory = Memory::initialise_from_file(matches.value_of("INPUT").unwrap());
     let display = Display::initialise();
     let keyboard = MiniFbKeyboard::initialise(&window);
     let mut cpu = CPU::initialise(memory, display, keyboard);
 
-    // // Load the value 0x06 (the digit to display) into register V0
-    // cpu.memory.insert_instruction(0x200, 0x6006);
-    // // Load the value 0x00 into register V1 (x coord for the 6)
-    // cpu.memory.insert_instruction(0x202, 0x6100);
-    // // Get the memory location for the sprite for the character `6`
-    // cpu.memory.insert_instruction(0x204, 0xF029);
-    // // Display this sprite
-    // cpu.memory.insert_instruction(0x206, 0xD115);
-
-    // // Repeate the above for the character `9`
-
-    // // Load the value 0x09 (the digit to display) into register V2
-    // cpu.memory.insert_instruction(0x208, 0x6209);
-    // // Load the value 0x05 into register V3 (x coord for the 9)
-    // cpu.memory.insert_instruction(0x20A, 0x6305);
-
-    // // Load the value 0x00 into register V4 (y coord for the 9)
-    // cpu.memory.insert_instruction(0x20C, 0x6400);
-
-    // // Get the memory location for the sprite for the character `9`
-    // cpu.memory.insert_instruction(0x20E, 0xF229);
-    // // Display this sprite
-    // cpu.memory.insert_instruction(0x210, 0xD345);
-
-    // Limit to max ~60 fps update rate
     let mut inner_window = window.borrow_mut();
-    inner_window.limit_update_rate(Some(std::time::Duration::from_micros(16600)));
+    inner_window.limit_update_rate(Some(std::time::Duration::from_micros(1000)));
 
     let last_cycle_time = chrono::Utc::now().time();
     while inner_window.is_open() && !inner_window.is_key_down(Key::Escape) {
@@ -94,7 +65,6 @@ fn main() {
 
         if inner_window.is_key_pressed(Key::N, minifb::KeyRepeat::Yes) {
             cpu.execute_next_instruction();
-            // cpu.view_state();
         }
 
         if inner_window.is_key_pressed(Key::D, minifb::KeyRepeat::No) {
