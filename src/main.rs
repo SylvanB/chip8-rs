@@ -2,7 +2,7 @@ use std::{cell::RefCell, fs::File, io::Write, rc::Rc};
 
 use crate::{
     cpu::CPU,
-    display::{DebugDisplay, Display, SCREEN_HEIGHT, SCREEN_WIDTH},
+    display::{Display, SCREEN_HEIGHT, SCREEN_WIDTH},
     keyboard::minifb_keyboard::MiniFbKeyboard,
     memory::Memory,
 };
@@ -10,12 +10,10 @@ use clap::{load_yaml, App};
 use minifb::{Key, Window, WindowOptions};
 
 mod cpu;
-mod memory;
-pub mod opcode;
-
-// TODO: Implement these
 mod display;
 mod keyboard;
+mod memory;
+mod opcode;
 
 // Chip-8 CPU based on Cowgod's Technical Spec for Chip-8
 // http://devernay.free.fr/hacks/chip8/C8TECH10.HTM
@@ -71,6 +69,7 @@ fn main() {
             println!("Dumping memory to chip8rs_memdump.log");
             dump_memory(&mut cpu.memory);
         }
+        
         inner_window
             .update_with_buffer(&cpu.display.get_buffer(), SCREEN_WIDTH, SCREEN_HEIGHT)
             .unwrap();
