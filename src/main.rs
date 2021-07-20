@@ -23,7 +23,7 @@ fn main() {
 
     let window: Rc<RefCell<_>> = Rc::new(RefCell::new(
         Window::new(
-            "Chip8.rs - ESC to exit - N to step through execution",
+            "Chip8.rs - ESC to exit - N to step, S to stop, C to continue",
             SCREEN_WIDTH,
             SCREEN_HEIGHT,
             WindowOptions {
@@ -46,6 +46,7 @@ fn main() {
     inner_window.limit_update_rate(Some(std::time::Duration::from_micros(1000)));
 
     let last_cycle_time = chrono::Utc::now().time();
+    let mut should_run = true;
     while inner_window.is_open() && !inner_window.is_key_down(Key::Escape) {
         let curr_cycle_time = chrono::Utc::now().time();
 
@@ -69,7 +70,23 @@ fn main() {
             println!("Dumping memory to chip8rs_memdump.log");
             dump_memory(&mut cpu.memory);
         }
-        
+
+        if should_run {
+            cpu.execute_next_instruction();
+        } else {
+            if inner_window.is_key_pressed(Key::N, minifb::KeyRepeat::Yes) {
+                cpu.execute_next_instruction();
+            }
+        }
+
+        if inner_window.is_key_pressed(Key::S, minifb::KeyRepeat::No) {
+            should_run = false;
+        }
+
+        if inner_window.is_key_pressed(Key::C, minifb::KeyRepeat::No) {
+            should_run = true;
+        }
+
         inner_window
             .update_with_buffer(&cpu.display.get_buffer(), SCREEN_WIDTH, SCREEN_HEIGHT)
             .unwrap();
