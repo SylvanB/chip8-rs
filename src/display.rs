@@ -22,7 +22,6 @@ impl Display {
         self.screen
             .iter()
             .flatten()
-            // .map(|x| if *x { 0x0 as u32 } else { 0xFFFFFFFF as u32 })
             .map(|x| if *x { 0x0 as u32 } else { 0xFFFFFFFF as u32 })
             .collect()
     }
@@ -57,7 +56,7 @@ impl Display {
 
                 // indicate if the setting of the new pixel will
                 // overwrite the previous pixel (i.e change state)
-                if self.screen[curr_y][curr_x] != bit {
+                if self.screen[curr_y][curr_x] == true && bit == false {
                     did_overwrite = true;
                 }
 

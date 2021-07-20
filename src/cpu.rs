@@ -7,6 +7,9 @@ use crate::{
     opcode::OpCode,
 };
 
+pub(crate) const DELAY_INCREMENT: u32 = 16;
+pub(crate) const SOUND_DELAY_INCREMENT: u32 = 16;
+
 #[derive(Debug)]
 pub(crate) struct CPU<TKeyboard>
 where
@@ -17,7 +20,7 @@ where
     pub keyboard: TKeyboard,
 
     // General purpose addresses
-    pub v: [u8; 15],
+    pub v: [u8; 0x10],
 
     // Used for program flags
     pub vf: u8,
@@ -61,7 +64,7 @@ where
             memory,
             display,
             keyboard,
-            v: [0; 15],
+            v: [0; 0x10],
             vf: 0x0,
             vi: 0x0,
             delay_timer: 0x0,
@@ -108,6 +111,18 @@ where
             0xf000..=0xffff => self.ops_f(&op),
             _ => {} // no-op
         };
+    }
+
+    pub fn decrement_delay_timer(&mut self) {
+        if self.delay_timer > 0 {
+            self.delay_timer -= 1;
+        }
+    }
+
+    pub fn decrement_sound_timer(&mut self) {
+        if self.sound_timer > 0 {
+            self.sound_timer -= 1;
+        }
     }
 
     /// Get the next opcode
@@ -245,6 +260,7 @@ where
         }
     }
 
+    /// Set I = location of sprite for digit Vx.
     fn ld_f_vx(&mut self, op: &OpCode) {
         self.vi = (self.v[op.x() as usize] << 4) as u16;
     }
@@ -467,8 +483,8 @@ where
     /// Display n-byte sprite starting at memory location I at (Vx, Vy), set VF = collision.
     /// If a sprite is going to be rendered outside the window boundries, then it will wrap around the display.
     fn drw(&mut self, op: &OpCode) {
-        let x = op.x();
-        let y = op.y();
+        let x = self.v[op.x() as usize];
+        let y = self.v[op.y() as usize];
         let n = (op.raw() & 0x000F) as u8;
 
         let mut sprite = vec![0; n as _];
