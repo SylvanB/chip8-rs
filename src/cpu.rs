@@ -1,3 +1,5 @@
+use std::num::Wrapping;
+
 use rand::Rng;
 
 use crate::{
@@ -207,7 +209,7 @@ where
 
     // Adds the value `kk` to the value in the register `Vx`
     fn add(&mut self, op: &OpCode) {
-        self.v[op.x() as usize] += op.kk();
+        self.v[op.x() as usize] = (Wrapping(self.v[op.x() as usize]) + Wrapping(op.kk())).0;
     }
 
     /// Loads the value in the register `Vy` into the register `Vx`
@@ -372,12 +374,12 @@ where
         let vx = self.v[x as usize] as u16;
         let vy = self.v[y as usize] as u16;
 
-        let res = vx - vy;
+        let res = (Wrapping(vx) - Wrapping(vy)).0;
 
         if vx > vy {
-            self.vf = 1;
-        } else {
             self.vf = 0;
+        } else {
+            self.vf = 1;
         }
 
         self.v[x as usize] = (res & 0x00FF) as u8;
@@ -492,6 +494,12 @@ where
         for i in 0..n {
             sprite[i as usize] = self.memory.get((self.vi + (i as u16)) as _);
         }
+
+        // dbg!(&sprite);
+        // dbg!(x as usize, y as usize);
+        // println!("sprite: {:#02x?}", sprite);
+        // println!("x: {:#02x?}", x as usize);
+        // println!("y: {:#02x?}", y as usize);
 
         self.vf = self
             .display

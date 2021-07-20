@@ -1,0 +1,6 @@
+name: chip8-rs
+args:
+    - INPUT:
+        help: The Chip8 ROM (.ch8) file to use
+        required: true
+        index: 1
