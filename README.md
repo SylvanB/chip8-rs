@@ -17,8 +17,8 @@ The spec was based on the brilliant document from [Cowgods neato specification](
   - GUI for viewing the internal state of the CPU
     - Semi-completed. Currently able to view internal state of Memory/Display/CPU via `DebugDisplay.view_state()`
 - [x] Support for the timers
-- [x] Support for the Chip-8 16 key keyboard
-  - Done I think? Need to double check this functionality. 
+- [ ] Support for the Chip-8 16 key keyboard
+  - Currently broken, any ROM that tried to read keyboard state will cause the emulator to panic
 - Execution control
   - [x] Ability to step through execution? 
   - Modify memory locations at runtime? 
