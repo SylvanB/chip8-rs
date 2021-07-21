@@ -271,12 +271,14 @@ where
         // Scuffed implementation of ld_vx_k, would ideally register some kind of callback on the keyboard?
         // It could utilise Minifb callbacks maybe?
         // In the meantime lets just get the first key we recognise as being pressed kekw
-        self.v[op.x() as usize] = self
-            .keyboard
-            .get_current_keydowns()
-            .first()
-            .unwrap()
-            .to_owned();
+        let curr_key = self.keyboard.get_current_keydowns().first();
+
+        match curr_key {
+            Some(k) => {
+                self.v[op.x() as usize] = *k;
+            }
+            None => {}
+        };
     }
 
     fn ld_vx_dt(&mut self, op: &OpCode) {

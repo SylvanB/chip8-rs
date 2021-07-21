@@ -1,3 +1,5 @@
+use std::convert::{TryFrom, TryInto};
+
 use super::Keyboard;
 
 /// Used exclusively for testing components that rely on a keyboard
@@ -7,10 +9,11 @@ pub(crate) struct DummyKeyboard {
 }
 
 impl Keyboard for DummyKeyboard {
-    fn update_state(&mut self) {
+    fn update_state(&mut self, keys: &[u8]) {
         // Do nothing
         // During testting it is intended that the developer will manipulate the keybords state
         // externally. This is done by accessing curr_keydowns.
+        ()
     }
 
     fn get_current_keydowns(&self) -> &Vec<u8> {
