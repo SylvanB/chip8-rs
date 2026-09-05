@@ -1,4 +1,5 @@
 use std::fs;
+use std::io;
 
 use crate::display::DebugDisplay;
 
@@ -8,7 +9,30 @@ pub(crate) const MAX_MEM: usize = 0x1000;
 // Programs are restricted from using the first 512 bytes of the memory space
 pub(crate) const PROGRAM_START_OFFSET: usize = 0x200;
 
-pub(crate) const ETI_600_PROGRAM_START_OFFSET: usize = 0x600;
+// The 16 hex digit sprites, 5 bytes each, start at the beginning of memory.
+pub(crate) const FONT_SPRITE_OFFSET: usize = 0x00;
+
+// Each hex digit is a 5-byte sprite.
+pub(crate) const FONT_SPRITE_SIZE: usize = 5;
+
+const FONT_SPRITES: [[u8; FONT_SPRITE_SIZE]; 16] = [
+    [0xF0, 0x90, 0x90, 0x90, 0xF0], // 0
+    [0x20, 0x60, 0x20, 0x20, 0x70], // 1
+    [0xF0, 0x10, 0xF0, 0x80, 0xF0], // 2
+    [0xF0, 0x10, 0xF0, 0x10, 0xF0], // 3
+    [0x90, 0x90, 0xF0, 0x10, 0x10], // 4
+    [0xF0, 0x80, 0xF0, 0x10, 0xF0], // 5
+    [0xF0, 0x80, 0xF0, 0x90, 0xF0], // 6
+    [0xF0, 0x10, 0x20, 0x40, 0x40], // 7
+    [0xF0, 0x90, 0xF0, 0x90, 0xF0], // 8
+    [0xF0, 0x90, 0xF0, 0x10, 0xF0], // 9
+    [0xF0, 0x90, 0xF0, 0x90, 0x90], // A
+    [0xE0, 0x90, 0xE0, 0x90, 0xE0], // B
+    [0xF0, 0x80, 0x80, 0x80, 0xF0], // C
+    [0xE0, 0x90, 0x90, 0x90, 0xE0], // D
+    [0xF0, 0x80, 0xF0, 0x80, 0xF0], // E
+    [0xF0, 0x80, 0xF0, 0x80, 0x80], // F
+];
 
 #[derive(Debug)]
 pub(crate) struct Memory {
@@ -25,162 +49,48 @@ impl Memory {
     }
 
     fn setup_digit_sprites(&mut self) {
-        // Yes we are wasting alot of bytes here.
-        // No I dont care.
-        // No I wont fix it.
-        // its for my own sanity of remembering where the hell the sprites are.
-
-        // 0
-        self.data[0x0] = 0xF0;
-        self.data[0x1] = 0x90;
-        self.data[0x2] = 0x90;
-        self.data[0x3] = 0x90;
-        self.data[0x4] = 0xF0;
-
-        // 1
-        self.data[0x10] = 0x20;
-        self.data[0x11] = 0x60;
-        self.data[0x12] = 0x20;
-        self.data[0x13] = 0x20;
-        self.data[0x14] = 0x70;
-
-        // 2
-        self.data[0x20] = 0xF0;
-        self.data[0x21] = 0x10;
-        self.data[0x22] = 0xF0;
-        self.data[0x23] = 0x80;
-        self.data[0x24] = 0xF0;
-
-        // 3
-        self.data[0x30] = 0xF0;
-        self.data[0x31] = 0x10;
-        self.data[0x32] = 0xF0;
-        self.data[0x33] = 0x10;
-        self.data[0x34] = 0xF0;
-
-        // 4
-        self.data[0x40] = 0x90;
-        self.data[0x41] = 0x90;
-        self.data[0x42] = 0xF0;
-        self.data[0x43] = 0x10;
-        self.data[0x44] = 0x10;
-
-        // 5
-        self.data[0x50] = 0xF0;
-        self.data[0x51] = 0x80;
-        self.data[0x52] = 0xF0;
-        self.data[0x53] = 0x10;
-        self.data[0x54] = 0xF0;
-
-        // 6
-        self.data[0x60] = 0xF0;
-        self.data[0x61] = 0x80;
-        self.data[0x62] = 0xF0;
-        self.data[0x63] = 0x90;
-        self.data[0x64] = 0xF0;
-
-        // 7
-        self.data[0x70] = 0xF0;
-        self.data[0x71] = 0x10;
-        self.data[0x72] = 0x20;
-        self.data[0x73] = 0x40;
-        self.data[0x74] = 0x40;
-
-        // 8
-        self.data[0x80] = 0xF0;
-        self.data[0x81] = 0x90;
-        self.data[0x82] = 0xF0;
-        self.data[0x83] = 0x90;
-        self.data[0x84] = 0xF0;
-
-        // 9
-        self.data[0x90] = 0xF0;
-        self.data[0x91] = 0x90;
-        self.data[0x92] = 0xF0;
-        self.data[0x93] = 0x10;
-        self.data[0x94] = 0xF0;
-
-        // 10 / 0xA
-        self.data[0xA0] = 0xF0;
-        self.data[0xA1] = 0x90;
-        self.data[0xA2] = 0xF0;
-        self.data[0xA3] = 0x90;
-        self.data[0xA4] = 0x90;
-
-        // 11 / 0xA
-        self.data[0xB0] = 0xE0;
-        self.data[0xB1] = 0x90;
-        self.data[0xB2] = 0xE0;
-        self.data[0xB3] = 0x90;
-        self.data[0xB4] = 0xE0;
-
-        // 12 / 0xC
-        self.data[0xC0] = 0xF0;
-        self.data[0xC1] = 0x80;
-        self.data[0xC2] = 0x80;
-        self.data[0xC3] = 0x80;
-        self.data[0xC4] = 0xF0;
-
-        // 13 / 0xD
-        self.data[0xD0] = 0xE0;
-        self.data[0xD1] = 0x90;
-        self.data[0xD2] = 0x90;
-        self.data[0xD3] = 0x90;
-        self.data[0xD4] = 0xE0;
-
-        // 14 / 0xE
-        self.data[0xE0] = 0xF0;
-        self.data[0xE1] = 0x80;
-        self.data[0xE2] = 0xF0;
-        self.data[0xE3] = 0x80;
-        self.data[0xE4] = 0xF0;
-
-        // 15 / 0xF
-        self.data[0xF0] = 0xF0;
-        self.data[0xF1] = 0x80;
-        self.data[0xF2] = 0xF0;
-        self.data[0xF3] = 0x80;
-        self.data[0xF4] = 0x80;
+        for (digit, sprite) in FONT_SPRITES.iter().enumerate() {
+            let base = FONT_SPRITE_OFFSET + digit * FONT_SPRITE_SIZE;
+            for (i, byte) in sprite.iter().enumerate() {
+                self.data[base + i] = *byte;
+            }
+        }
     }
 
-    pub fn initialise_from_file(file: &str) -> Self {
-        // TODO: Handle this nicely
+    pub fn initialise_from_file(file: &str) -> io::Result<Self> {
         let mut memory = Self::initialise();
+        let rom = fs::read(file)?;
 
-        let file = fs::read(file).unwrap();
-
-        let mut i = 0x200;
-        for b in file {
-            if i > MAX_MEM {
+        for (i, byte) in rom.iter().enumerate() {
+            let addr = PROGRAM_START_OFFSET + i;
+            if addr >= MAX_MEM {
                 break;
             }
-            memory.data[i] = b;
-            i += 1;
+            memory.data[addr] = *byte;
         }
 
-        memory
+        Ok(memory)
     }
 
+    #[allow(dead_code)] // only used from within #[cfg(test)] modules
     pub fn insert_instruction(&mut self, index: usize, ins: u16) {
-        // TODO: Ensure that ops only start at even addresses (see spec line 193)
-
         self.data[index] = ((ins & 0xFF00) >> 8) as u8;
         self.data[index + 1] = (ins & 0x00FF) as u8;
     }
 
     pub fn write(&mut self, index: usize, val: u8) {
+        if index >= MAX_MEM {
+            panic!("Out of bounds memory write at address {:#04x}", index);
+        }
         self.data[index] = val;
     }
 
     pub fn get(&self, index: usize) -> u8 {
-        // TODO: Support ETI_600 offset
-        // TODO: Handle this error better - maybe return some Result variant.
-        if index > MAX_MEM {
-            panic!("Out of bound memory expcetion");
+        if index >= MAX_MEM {
+            panic!("Out of bounds memory read at address {:#04x}", index);
         }
 
-        // TODO: Remove this unwrap
-        *self.data.get(index).unwrap()
+        self.data[index]
     }
 }
 
@@ -191,12 +101,55 @@ impl DebugDisplay for Memory {
         for i in 0..MAX_MEM {
             if i % 0x10 == 0 && i != 0 {
                 r += 1;
-                println!("");
+                println!();
                 print!("{:02x}: ", r);
             }
 
             print!("{:02x} ", self.data[i]);
         }
-        println!("");
+        println!();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fonts_loaded_compact() {
+        let memory = Memory::initialise();
+
+        // Digit 7 sprite lives at offset 7 * 5 = 35.
+        assert_eq!(memory.data[35], 0xF0);
+        assert_eq!(memory.data[39], 0x40);
+        // Digit 0xF sprite lives at offset 15 * 5 = 75.
+        assert_eq!(memory.data[75], 0xF0);
+        assert_eq!(memory.data[79], 0x80);
+    }
+
+    #[test]
+    #[should_panic(expected = "Out of bounds memory write")]
+    fn memory_write_blocks_out_of_bounds() {
+        let mut memory = Memory::initialise();
+        memory.write(MAX_MEM, 0xFF);
+    }
+
+    #[test]
+    #[should_panic(expected = "Out of bounds memory read")]
+    fn memory_get_blocks_out_of_bounds() {
+        let memory = Memory::initialise();
+        memory.get(MAX_MEM);
+    }
+
+    #[test]
+    fn rom_loading_stops_at_memory_end() {
+        let dir = std::env::temp_dir();
+        let path = dir.join("chip8_rs_huge_rom.bin");
+        std::fs::write(&path, vec![0xAB; MAX_MEM + 100]).unwrap();
+
+        let memory = Memory::initialise_from_file(path.to_str().unwrap()).unwrap();
+
+        assert_eq!(memory.data[MAX_MEM - 1], 0xAB);
+        std::fs::remove_file(path).unwrap();
     }
 }

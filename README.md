@@ -15,10 +15,11 @@ The spec was based on the brilliant document from [Cowgods neato specification](
     - [x] Able to write sprites from arbitary memory locations to display using `drw` instruction
     - [x] Able to use built in sprites for hexidecimal numbers
   - GUI for viewing the internal state of the CPU
-    - Semi-completed. Currently able to view internal state of Memory/Display/CPU via `DebugDisplay.view_state()`
+    - Dedicated debugger window (`--debug`) showing registers, stack, disassembly and memory dumps
+    - Also able to view memory/display/CPU via `DebugDisplay.view_state()`
 - [x] Support for the timers
-- [ ] Support for the Chip-8 16 key keyboard
-  - Currently broken, any ROM that tried to read keyboard state will cause the emulator to panic
+- [x] Support for the Chip-8 16 key keyboard
+  - FX0A now blocks until a key is pressed, as the spec requires
 - Execution control
   - [x] Ability to step through execution? 
   - Modify memory locations at runtime? 

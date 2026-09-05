@@ -1,18 +1,17 @@
-use std::num::Wrapping;
-
 use rand::Rng;
 
 use crate::{
     display::{DebugDisplay, Display},
     keyboard::Keyboard,
-    memory::Memory,
+    memory::{Memory, MAX_MEM},
     opcode::OpCode,
 };
 
-pub(crate) const DELAY_INCREMENT: u32 = 16;
-pub(crate) const SOUND_DELAY_INCREMENT: u32 = 16;
+// Index of the VF (flag) register.
+const VF_INDEX: usize = 0xF;
 
 #[derive(Debug)]
+#[allow(clippy::upper_case_acronyms)] // applied where the type name would otherwise be awkward
 pub(crate) struct CPU<TKeyboard>
 where
     TKeyboard: Keyboard,
@@ -21,11 +20,8 @@ where
     pub display: Display,
     pub keyboard: TKeyboard,
 
-    // General purpose addresses
+    // General purpose registers, V[0xF] doubles as the flag register.
     pub v: [u8; 0x10],
-
-    // Used for program flags
-    pub vf: u8,
 
     // Commonly used to store memory addresses
     pub vi: u16,
@@ -55,6 +51,9 @@ where
     // Stores the address that should be returned to once a subroutine has finished execution
     // This gives Chip-8 a max nested subroutine level of 16
     pub stack: [u16; 16],
+
+    // When true (FX0A), execution halts until a key is pressed.
+    waiting_for_key: bool,
 }
 
 impl<TKeyboard> CPU<TKeyboard>
@@ -67,13 +66,13 @@ where
             display,
             keyboard,
             v: [0; 0x10],
-            vf: 0x0,
             vi: 0x0,
             delay_timer: 0x0,
             sound_timer: 0x0,
             pc: 0x200,
             sp: 0x0,
             stack: [0x0; 16],
+            waiting_for_key: false,
         }
     }
 
@@ -83,36 +82,47 @@ where
         }
     }
 
-    pub fn execute(&mut self) {
-        while let Some(op) = self.get_op() {
-            self.execute_op(op);
+    /// Returns true when the CPU has halted on FX0A waiting for a keypress.
+    pub fn is_waiting_for_key(&self) -> bool {
+        self.waiting_for_key
+    }
+
+    /// Reads a 16-bit word at `addr` without disturbing the CPU's state.
+    ///
+    /// Used by the debugger to disassemble instructions around the PC.
+    pub fn peek_word(&self, addr: u16) -> Option<u16> {
+        let index = addr as usize;
+        if index + 1 >= MAX_MEM {
+            return None;
         }
+
+        Some(((self.memory.data[index] as u16) << 8) | self.memory.data[index + 1] as u16)
     }
 
     fn execute_op(&mut self, op: OpCode) {
-        match op.raw() {
-            0x0000..=0x0ff => match op.raw() {
+        match op.id() {
+            0x0 => match op.raw() {
                 0x00e0 => self.cls(),
                 0x00ee => self.ret(),
                 _ => {} // no-op
             },
-            0x1000..=0x1fff => self.jp(&op),
-            0x2000..=0x2fff => self.call(&op),
-            0x3000..=0x3fff => self.se(&op),
-            0x4000..=0x4fff => self.sne(&op),
-            0x5000..=0x5fff => self.se_r(&op),
-            0x6000..=0x6fff => self.ld_r(&op),
-            0x7000..=0x7fff => self.add(&op),
-            0x8000..=0x8fff => self.ops_8(&op),
-            0x9000..=0x9fff => self.sne_xy(&op),
-            0xa000..=0xafff => self.ld_i(&op),
-            0xb000..=0xbfff => self.jp_v0(&op),
-            0xc000..=0xcfff => self.rnd(&op),
-            0xd000..=0xdfff => self.drw(&op),
-            0xe000..=0xefff => self.ops_e(&op),
-            0xf000..=0xffff => self.ops_f(&op),
+            0x1 => self.jp(&op),
+            0x2 => self.call(&op),
+            0x3 => self.se(&op),
+            0x4 => self.sne(&op),
+            0x5 => self.se_r(&op),
+            0x6 => self.ld_r(&op),
+            0x7 => self.add(&op),
+            0x8 => self.ops_8(&op),
+            0x9 => self.sne_xy(&op),
+            0xA => self.ld_i(&op),
+            0xB => self.jp_v0(&op),
+            0xC => self.rnd(&op),
+            0xD => self.drw(&op),
+            0xE => self.ops_e(&op),
+            0xF => self.ops_f(&op),
             _ => {} // no-op
-        };
+        }
     }
 
     pub fn decrement_delay_timer(&mut self) {
@@ -127,25 +137,28 @@ where
         }
     }
 
-    /// Get the next opcode
+    /// Get the next opcode.
     ///
-    /// Opcodes are constructed from 2 bytes, the most significant first (big endian)
-    /// We fetch the next two values in memory and construct the opcode by shifting and bitwise AND'ing the bytes.
+    /// Opcodes are 2 bytes, the most significant first (big endian). Returns `None`
+    /// once the PC has run past the end of memory so the emulator can halt gracefully.
     fn get_op(&mut self) -> Option<OpCode> {
-        let a = (self.memory.get(self.pc as _) as u16) << 8;
+        if self.pc as usize >= MAX_MEM - 1 {
+            return None;
+        }
+
+        let a = (self.memory.get(self.pc as usize) as u16) << 8;
         self.pc += 1;
-        let b = self.memory.get(self.pc as _) as u16;
+        let b = self.memory.get(self.pc as usize) as u16;
         self.pc += 1;
 
-        Some(OpCode::new((a | b) as u16))
+        Some(OpCode::new(a | b))
     }
 
     fn ops_e(&mut self, op: &OpCode) {
-        if op.raw() & 0x00FF == 0x9E {
-            self.skp_vx(op);
-        } else if op.raw() & 0x00FF == 0xA1 {
-            self.sknp_vx(op);
-        } else {
+        match op.raw() & 0x00FF {
+            0x9E => self.skp_vx(op),
+            0xA1 => self.sknp_vx(op),
+            _ => {} // no-op
         }
     }
 
@@ -156,12 +169,9 @@ where
 
     /// Used to return from a subroutine
     fn ret(&mut self) {
-        match self.stack.get(self.sp as usize) {
-            Some(addr) => {
-                self.pc = *addr;
-                self.sp -= 1;
-            }
-            None => {}
+        if self.sp > 0 {
+            self.pc = self.stack[self.sp as usize];
+            self.sp -= 1;
         }
     }
 
@@ -172,14 +182,16 @@ where
 
     /// Calls the subroutine at the specific address
     fn call(&mut self, op: &OpCode) {
-        self.sp += 1;
-        self.stack[self.sp as usize] = self.pc;
-        self.pc = op.nnn();
+        if (self.sp as usize) < self.stack.len() - 1 {
+            self.sp += 1;
+            self.stack[self.sp as usize] = self.pc;
+            self.pc = op.nnn();
+        }
     }
 
     /// Skip if a register value is equal to a given byte
     ///
-    /// Given a op of `0x3[X][KK]` if the  value of `V[X] == [KK]` skip the next instruction
+    /// Given a op of `0x3[X][KK]` if the value of `V[X] == [KK]` skip the next instruction
     fn se(&mut self, op: &OpCode) {
         if (self.v[op.x() as usize]) == op.kk() {
             self.pc += 2;
@@ -188,7 +200,7 @@ where
 
     /// Skip if a register value is not equal to a given byte
     ///
-    /// Given a op of `0x3[X][KK]` if the  value of `V[X] != [KK]` skip the next instruction
+    /// Given a op of `0x4[X][KK]` if the value of `V[X] != [KK]` skip the next instruction
     fn sne(&mut self, op: &OpCode) {
         if (self.v[op.x() as usize]) != op.kk() {
             self.pc += 2;
@@ -207,9 +219,10 @@ where
         self.v[op.x() as usize] = op.kk();
     }
 
-    // Adds the value `kk` to the value in the register `Vx`
+    /// Adds the value `kk` to the value in the register `Vx`
     fn add(&mut self, op: &OpCode) {
-        self.v[op.x() as usize] = (Wrapping(self.v[op.x() as usize]) + Wrapping(op.kk())).0;
+        let x = op.x() as usize;
+        self.v[x] = self.v[x].wrapping_add(op.kk());
     }
 
     /// Loads the value in the register `Vy` into the register `Vx`
@@ -218,67 +231,56 @@ where
     }
 
     fn ops_8(&mut self, op: &OpCode) {
-        if op.raw() & 0x000F == 0x0 {
-            self.ld_xy(&op);
-        } else if op.raw() & 0x000F == 0x1 {
-            self.or_xy(&op);
-        } else if op.raw() & 0x000F == 0x2 {
-            self.and_xy(&op);
-        } else if op.raw() & 0x000F == 0x3 {
-            self.xor_xy(&op);
-        } else if op.raw() & 0x000F == 0x4 {
-            self.add_xy(&op);
-        } else if op.raw() & 0x000F == 0x5 {
-            self.sub_xy(&op);
-        } else if op.raw() & 0x000F == 0x6 {
-            self.shr(&op);
-        } else if op.raw() & 0x000F == 0x7 {
-            self.subn_yx(&op);
-        } else if op.raw() & 0x000F == 0xE {
-            self.shl(&op);
-        } else {
+        match op.raw() & 0x000F {
+            0x0 => self.ld_xy(op),
+            0x1 => self.or_xy(op),
+            0x2 => self.and_xy(op),
+            0x3 => self.xor_xy(op),
+            0x4 => self.add_xy(op),
+            0x5 => self.sub_xy(op),
+            0x6 => self.shr(op),
+            0x7 => self.subn_yx(op),
+            0xE => self.shl(op),
+            _ => {} // no-op
         }
     }
 
     fn ops_f(&mut self, op: &OpCode) {
-        if op.raw() & 0x00FF == 0x07 {
-            self.ld_vx_dt(&op);
-        } else if op.raw() & 0x00FF == 0x15 {
-            self.ld_dt(&op);
-        } else if op.raw() & 0x00FF == 0x18 {
-            self.ld_st(&op);
-        } else if op.raw() & 0x00FF == 0x0A {
-            self.ld_vx_k(&op);
-        } else if op.raw() & 0x00FF == 0x1E {
-            self.add_i(&op);
-        } else if op.raw() & 0x00FF == 0x29 {
-            self.ld_f_vx(&op);
-        } else if op.raw() & 0x00FF == 0x33 {
-            self.ld_b(&op);
-        } else if op.raw() & 0x00FF == 0x55 {
-            self.ld_mem_i_vx(&op);
-        } else if op.raw() & 0x00FF == 0x65 {
-            self.ld_mem_vx_i(&op);
+        match op.raw() & 0x00FF {
+            0x07 => self.ld_vx_dt(op),
+            0x15 => self.ld_dt(op),
+            0x18 => self.ld_st(op),
+            0x0A => self.ld_vx_k(op),
+            0x1E => self.add_i(op),
+            0x29 => self.ld_f_vx(op),
+            0x33 => self.ld_b(op),
+            0x55 => self.ld_mem_i_vx(op),
+            0x65 => self.ld_mem_vx_i(op),
+            _ => {} // no-op
         }
     }
 
     /// Set I = location of sprite for digit Vx.
     fn ld_f_vx(&mut self, op: &OpCode) {
-        self.vi = (self.v[op.x() as usize] << 4) as u16;
+        use crate::memory::FONT_SPRITE_SIZE;
+        self.vi = (self.v[op.x() as usize] as u16) * FONT_SPRITE_SIZE as u16;
     }
 
+    /// Wait for a keypress and store it in Vx (FX0A).
+    ///
+    /// If no key is currently pressed, execution halts: the PC is rewound so the
+    /// instruction is re-executed once a key arrives.
     fn ld_vx_k(&mut self, op: &OpCode) {
-        // Scuffed implementation of ld_vx_k, would ideally register some kind of callback on the keyboard?
-        // It could utilise Minifb callbacks maybe?
-        // In the meantime lets just get the first key we recognise as being pressed kekw
-        let curr_key = self.keyboard.get_current_keydowns().first();
-
-        match curr_key {
-            Some(k) => {
-                self.v[op.x() as usize] = *k;
+        match self.keyboard.get_current_keydowns().first().copied() {
+            Some(key) => {
+                self.v[op.x() as usize] = key;
+                self.waiting_for_key = false;
             }
-            None => {}
-        };
+            None => {
+                self.pc -= 2;
+                self.waiting_for_key = true;
+            }
+        }
     }
 
     fn ld_vx_dt(&mut self, op: &OpCode) {
@@ -305,28 +307,28 @@ where
         let tens = (value / 10) % 10;
         let ones = value % 10;
 
-        let addr = self.vi;
-        self.memory.write(addr as usize, hund);
-        self.memory.write((addr + 1) as usize, tens);
-        self.memory.write((addr + 2) as usize, ones);
+        let addr = self.vi as usize;
+        self.memory.write(addr, hund);
+        self.memory.write(addr + 1, tens);
+        self.memory.write(addr + 2, ones);
     }
 
     /// Stores the values of the register in the range 0..=Vx starting at the address pointed at by Vi.
     fn ld_mem_i_vx(&mut self, op: &OpCode) {
-        let max = op.x();
+        let max = op.x() as usize;
 
         for x in 0..=max {
-            let val = self.v[x as usize];
-            self.memory.write((self.vi + (x as u16)) as usize, val);
+            let val = self.v[x];
+            self.memory.write(self.vi as usize + x, val);
         }
     }
 
     /// Read into registers V0 through Vx from memory starting at location I.
     fn ld_mem_vx_i(&mut self, op: &OpCode) {
-        let max = op.x();
+        let max = op.x() as usize;
 
         for x in 0..=max {
-            self.v[x as usize] = self.memory.get((self.vi + (x as u16)) as usize);
+            self.v[x] = self.memory.get(self.vi as usize + x);
         }
     }
 
@@ -349,112 +351,73 @@ where
     ///
     /// If the result of the addition is greater than 255, the VF flag is set to 1 else 0;
     fn add_xy(&mut self, op: &OpCode) {
-        let x = op.x();
-        let y = op.y();
+        let x = op.x() as usize;
+        let y = op.y() as usize;
 
-        let vx = self.v[x as usize] as u16;
-        let vy = self.v[y as usize] as u16;
+        let (res, overflow) = self.v[x].overflowing_add(self.v[y]);
 
-        let res = vx + vy;
-
-        if res > 255 {
-            self.vf = 1;
-        } else {
-            self.vf = 0;
-        }
-
-        self.v[x as usize] = (res & 0x00FF) as u8;
+        self.v[VF_INDEX] = if overflow { 1 } else { 0 };
+        self.v[x] = res;
     }
 
     /// Subtracts the value of the register `Vy` from `Vx` and stores it in `Vx`
     ///
-    /// If `Vx` > `Vy` set VF to 1, else 0
+    /// VF is set to 1 if there was no borrow (Vx >= Vy), else 0.
     fn sub_xy(&mut self, op: &OpCode) {
-        let x = op.x();
-        let y = op.y();
+        let x = op.x() as usize;
+        let y = op.y() as usize;
 
-        let vx = self.v[x as usize] as u16;
-        let vy = self.v[y as usize] as u16;
+        let vx = self.v[x];
+        let vy = self.v[y];
 
-        let res = (Wrapping(vx) - Wrapping(vy)).0;
-
-        if vx > vy {
-            self.vf = 0;
-        } else {
-            self.vf = 1;
-        }
-
-        self.v[x as usize] = (res & 0x00FF) as u8;
+        self.v[VF_INDEX] = if vx >= vy { 1 } else { 0 };
+        self.v[x] = vx.wrapping_sub(vy);
     }
 
-    /// Subtracts the value of the register `Vy` from `Vx` and stores it in `Vx`
+    /// Subtracts the value of the register `Vx` from `Vy` and stores it in `Vx`
     ///
-    /// If `Vx` > `Vy` set VF to 1, else 0
+    /// VF is set to 1 if there was no borrow (Vy >= Vx), else 0.
     fn subn_yx(&mut self, op: &OpCode) {
-        let x = op.x();
-        let y = op.y();
+        let x = op.x() as usize;
+        let y = op.y() as usize;
 
-        let vx = self.v[x as usize] as u16;
-        let vy = self.v[y as usize] as u16;
+        let vx = self.v[x];
+        let vy = self.v[y];
 
-        let res = vy - vx;
-
-        if vy > vx {
-            self.vf = 1;
-        } else {
-            self.vf = 0;
-        }
-
-        self.v[x as usize] = (res & 0x00FF) as u8;
+        self.v[VF_INDEX] = if vy >= vx { 1 } else { 0 };
+        self.v[x] = vy.wrapping_sub(vx);
     }
 
     /// Shifts the value of `Vx` right by 1 bit
     ///
-    /// If the least-significant bit of `Vx` is 1, then VF is set to 1, else 0.
+    /// If the least-significant bit of `Vx` was 1, then VF is set to 1, else 0.
     fn shr(&mut self, op: &OpCode) {
-        // TODO: Allow the additional `Vy` register to be shifted optionally
+        let x = op.x() as usize;
+        let vx = self.v[x];
 
-        let x = op.x();
-        let vx = self.v[x as usize];
-
-        self.v[x as usize] = vx >> 1;
-
-        if vx & 0x0001 == 1 {
-            self.vf = 1;
-        } else {
-            self.vf = 0;
-        }
+        self.v[VF_INDEX] = if vx & 0x01 == 1 { 1 } else { 0 };
+        self.v[x] = vx >> 1;
     }
 
     /// Shifts the value of `Vx` left by 1 bit
     ///
-    /// If the most-significant bit of `Vx` is 1, then VF is set to 1, else 0.
+    /// If the most-significant bit of `Vx` was 1, then VF is set to 1, else 0.
     fn shl(&mut self, op: &OpCode) {
-        // TODO: Allow the additional `Vy` register to be shifted optionally
+        let x = op.x() as usize;
+        let vx = self.v[x];
 
-        let x = op.x();
-        let vx = self.v[x as usize];
-
-        self.v[x as usize] = vx << 1;
-
-        if vx & 0x0001 == 1 {
-            self.vf = 1;
-        } else {
-            self.vf = 0;
-        }
+        self.v[VF_INDEX] = if vx & 0x80 == 0x80 { 1 } else { 0 };
+        self.v[x] = vx << 1;
     }
 
     /// Skip if a register value is not equal to the value of another register
     ///
-    /// Given a op of `0x3[X][Y]0` if the  value of `V[X] != V[Y]` skip the next instruction
+    /// Given a op of `0x9[X][Y]0` if the value of `V[X] != V[Y]` skip the next instruction
     fn sne_xy(&mut self, op: &OpCode) {
-        let x = op.x();
-        let y = op.y();
+        let x = op.x() as usize;
+        let y = op.y() as usize;
 
-        let vx = self.v[x as usize];
-        let vy = self.v[y as usize];
-
-        if vx != vy {
+        if self.v[x] != self.v[y] {
             self.pc += 2;
         }
     }
@@ -475,13 +438,13 @@ where
 
     /// Sets Vx to a random byte AND'd with KK.
     fn rnd(&mut self, op: &OpCode) {
-        let x = op.x();
+        let x = op.x() as usize;
         let kk = op.kk();
 
         let rand_number: u8 = rand::thread_rng().gen_range(0..=255);
         let res = kk & rand_number;
 
-        self.v[x as usize] = res;
+        self.v[x] = res;
     }
 
     /// Display n-byte sprite starting at memory location I at (Vx, Vy), set VF = collision.
@@ -494,30 +457,17 @@ where
         let mut sprite = vec![0; n as _];
 
         for i in 0..n {
-            sprite[i as usize] = self.memory.get((self.vi + (i as u16)) as _);
+            sprite[i as usize] = self.memory.get((self.vi + (i as u16)) as usize);
         }
 
-        // dbg!(&sprite);
-        // dbg!(x as usize, y as usize);
-        // println!("sprite: {:#02x?}", sprite);
-        // println!("x: {:#02x?}", x as usize);
-        // println!("y: {:#02x?}", y as usize);
-
-        self.vf = self
-            .display
-            .display_sprite((&(x as usize), &(y as usize)), &sprite) as u8;
+        self.v[VF_INDEX] = self.display.display_sprite((x as usize, y as usize), &sprite) as u8;
     }
 
     /// Skip the next instruction if the key corresponding to the value currently in Vx is pressed.
     fn skp_vx(&mut self, op: &OpCode) {
         let vx = self.v[op.x() as usize];
 
-        if self
-            .keyboard
-            .get_current_keydowns()
-            .iter()
-            .any(|&k| k == vx)
-        {
+        if self.keyboard.get_current_keydowns().contains(&vx) {
             self.pc += 2;
         }
     }
@@ -526,12 +476,7 @@ where
     fn sknp_vx(&mut self, op: &OpCode) {
         let vx = self.v[op.x() as usize];
 
-        if self
-            .keyboard
-            .get_current_keydowns()
-            .iter()
-            .all(|&k| k != vx)
-        {
+        if self.keyboard.get_current_keydowns().iter().all(|&k| k != vx) {
             self.pc += 2;
         }
     }
@@ -544,21 +489,21 @@ where
     fn view_state(&self) {
         println!("Registers:");
         println!("{:#x?}", self.v);
-        println!("vf: {:#x?} vi: {:#x?}", self.vf, self.vi);
+        println!("vf: {:#x?} vi: {:#x?}", self.v[VF_INDEX], self.vi);
         println!("pc: {:#x?} sp: {:#x?}", self.pc, self.sp);
-        println!("");
+        println!();
     }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{
-        display::{DebugDisplay, Display},
+        display::Display,
         keyboard::dummy_keyboard::DummyKeyboard,
         memory::Memory,
     };
 
-    use super::CPU;
+    use super::*;
 
     fn get_cpu() -> CPU<DummyKeyboard> {
         CPU::initialise(
@@ -570,8 +515,7 @@ mod tests {
 
     fn load_new_cpu_with_instruction(op: u16) -> CPU<DummyKeyboard> {
         let mut cpu = get_cpu();
-        cpu.memory.data[0x200] = ((op & 0xFF00) >> 8) as u8;
-        cpu.memory.data[0x201] = (op & 0x00FF) as u8;
+        cpu.memory.insert_instruction(0x200, op);
 
         cpu
     }
@@ -590,8 +534,24 @@ mod tests {
     }
 
     #[test]
-    fn cls() {
-        // Do this some other time when we actually have shit that displays
+    fn ret_ignored_when_stack_empty() {
+        let mut cpu = load_new_cpu_with_instruction(0x00EE);
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.sp, 0);
+        assert_eq!(cpu.pc, 0x202);
+    }
+
+    #[test]
+    fn cls_clears_screen() {
+        let mut cpu = get_cpu();
+        cpu.display.screen[1][1] = true;
+        cpu.memory.insert_instruction(0x200, 0x00E0);
+
+        cpu.execute_next_instruction();
+
+        assert!(cpu.display.screen.iter().flatten().all(|&p| !p));
     }
 
     #[test]
@@ -762,7 +722,7 @@ mod tests {
         cpu.execute_next_instruction();
 
         assert_eq!(cpu.v[0], 0xFF);
-        assert_eq!(cpu.vf, 0x0);
+        assert_eq!(cpu.v[VF_INDEX], 0x0);
     }
 
     #[test]
@@ -774,40 +734,68 @@ mod tests {
         cpu.execute_next_instruction();
 
         assert_eq!(cpu.v[0], 0x0);
-        assert_eq!(cpu.vf, 0x1);
+        assert_eq!(cpu.v[VF_INDEX], 0x1);
     }
 
-    // TODO: Define what should occur when overflow subtraction occurs in the CPU?
-    // Doesnt seem to be defined in the spec very clearly.
+    #[test]
+    fn sub_xy_no_borrow() {
+        let mut cpu = load_new_cpu_with_instruction(0x8015);
+        cpu.v[0] = 0xF0;
+        cpu.v[1] = 0x10;
 
-    // #[test]
-    // fn sub_xy_no_borrow() {
-    //     let mut cpu = load_new_cpu_with_instruction(0x8015);
-    //     cpu.v[0] = 0xF0;
-    //     cpu.v[1] = 0x10;
+        cpu.execute_next_instruction();
 
-    //     cpu.execute_next_instruction();
+        assert_eq!(cpu.v[0], 0xE0);
+        assert_eq!(cpu.v[VF_INDEX], 0x1);
+    }
 
-    //     assert_eq!(cpu.v[0], 0xE0);
-    //     assert_eq!(cpu.vf, 0x1);
-    // }
+    #[test]
+    fn sub_xy_borrow() {
+        let mut cpu = load_new_cpu_with_instruction(0x8015);
+        cpu.v[0] = 0x10;
+        cpu.v[1] = 0x20;
 
-    // #[test]
-    // fn sub_xy_borrow() {
-    //     let mut cpu = load_new_cpu_with_instruction(0x8015);
-    //     cpu.v[0] = 0x10;
-    //     cpu.v[1] = 0x20;
+        cpu.execute_next_instruction();
 
-    //     cpu.execute_next_instruction();
+        assert_eq!(cpu.v[0], 0xF0);
+        assert_eq!(cpu.v[VF_INDEX], 0x0);
+    }
 
-    //     assert_eq!(cpu.v[0], 0x0);
-    //     assert_eq!(cpu.vf, 0x0);
-    // }
+    #[test]
+    fn sub_xy_equal_values_no_borrow() {
+        let mut cpu = load_new_cpu_with_instruction(0x8015);
+        cpu.v[0] = 0x20;
+        cpu.v[1] = 0x20;
 
-    // TODO: Same as previous sub_xy tests
-    // Need to define behavior more fully.
-    // #[test]
-    // fn subn() {}
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.v[0], 0x00);
+        assert_eq!(cpu.v[VF_INDEX], 0x1);
+    }
+
+    #[test]
+    fn subn_yx_no_borrow() {
+        let mut cpu = load_new_cpu_with_instruction(0x8017);
+        cpu.v[0] = 0x10;
+        cpu.v[1] = 0x30;
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.v[0], 0x20);
+        assert_eq!(cpu.v[VF_INDEX], 0x1);
+    }
+
+    #[test]
+    fn subn_yx_borrow() {
+        let mut cpu = load_new_cpu_with_instruction(0x8017);
+        cpu.v[0] = 0x30;
+        cpu.v[1] = 0x10;
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.v[0], 0xE0);
+        assert_eq!(cpu.v[VF_INDEX], 0x0);
+    }
 
     #[test]
     fn shr() {
@@ -827,32 +815,41 @@ mod tests {
         cpu.execute_next_instruction();
 
         assert_eq!(cpu.v[0], 0x4);
-        assert_eq!(cpu.vf, 0x1);
+        assert_eq!(cpu.v[VF_INDEX], 0x1);
     }
 
-    // TODO: Define SHL behavior when Vx > 128
-    // Again, more behavior that im unsure what is actually expected
-    // SHL when used on a numbe > 128 will result in a 8-bit number overflow
-    // What should happen here? shitcan the bits? use set it to 255?
-    // #[test]
-    // fn shl() {
-    //     let mut cpu = load_new_cpu_with_instruction(0x800E);
-    //     cpu.v[0] = 0x08;
+    #[test]
+    fn shr_vf_cleared_when_even() {
+        let mut cpu = load_new_cpu_with_instruction(0x8006);
+        cpu.v[0] = 0x08;
 
-    //     cpu.execute_next_instruction();
+        cpu.execute_next_instruction();
 
-    //     assert_eq!(cpu.v[0], 0x10);
-    // }
+        assert_eq!(cpu.v[0], 0x4);
+        assert_eq!(cpu.v[VF_INDEX], 0x0);
+    }
 
-    // #[test]
-    // fn shl_vf_set_when_over_128() {
-    //     let mut cpu = load_new_cpu_with_instruction(0x800E);
-    //     cpu.v[0] = 0b10001111;
+    #[test]
+    fn shl_shifts_left() {
+        let mut cpu = load_new_cpu_with_instruction(0x800E);
+        cpu.v[0] = 0x08;
 
-    //     cpu.execute_next_instruction();
+        cpu.execute_next_instruction();
 
-    //     assert_eq!(cpu.v[0], 0x10);
-    // }
+        assert_eq!(cpu.v[0], 0x10);
+        assert_eq!(cpu.v[VF_INDEX], 0x0);
+    }
+
+    #[test]
+    fn shl_vf_set_when_msb_was_1() {
+        let mut cpu = load_new_cpu_with_instruction(0x800E);
+        cpu.v[0] = 0b1000_1111;
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.v[0], 0b0001_1110);
+        assert_eq!(cpu.v[VF_INDEX], 0x1);
+    }
 
     #[test]
     fn sne_xy_skip_when_not_equal() {
@@ -895,36 +892,57 @@ mod tests {
         assert_eq!(cpu.pc, 0x66A);
     }
 
-    // TODO: PEPELAUGH somehow deal with the rng.
-    // #[test]
-    // fn rnd() {
-    //     let mut cpu = load_new_cpu_with_instruction(0xC066);
-    //     cpu.v[0] = 0x4;
+    #[test]
+    fn rnd_masks_random_byte() {
+        let mut cpu = load_new_cpu_with_instruction(0xC0AA);
+        cpu.execute_next_instruction();
+        // Mask 0xAA only allows the odd bits through.
+        assert_eq!(cpu.v[0] & 0x55, 0x0);
 
-    //     cpu.execute_next_instruction();
-
-    //     assert_eq!(cpu.pc, 0x66A);
-    // }
+        let mut cpu = load_new_cpu_with_instruction(0xC000);
+        cpu.execute_next_instruction();
+        assert_eq!(cpu.v[0], 0x0);
+    }
 
     #[test]
-    fn drw() {
+    fn drw_draws_sprite_pixels() {
         let mut cpu = get_cpu();
 
         cpu.memory.data[0x600] = 0xFF;
         cpu.vi = 0x600;
+        cpu.v[0] = 1;
+        cpu.v[1] = 1;
         cpu.memory.insert_instruction(0x200, 0xD111);
 
         cpu.execute_next_instruction();
-        cpu.display.view_state();
 
-        assert_eq!(cpu.display.screen[1][1], true);
-        assert_eq!(cpu.display.screen[1][2], true);
-        assert_eq!(cpu.display.screen[1][3], true);
-        assert_eq!(cpu.display.screen[1][4], true);
-        assert_eq!(cpu.display.screen[1][5], true);
-        assert_eq!(cpu.display.screen[1][6], true);
-        assert_eq!(cpu.display.screen[1][7], true);
-        assert_eq!(cpu.display.screen[1][8], true);
+        assert_eq!(cpu.v[VF_INDEX], 0x0);
+        assert!(cpu.display.screen[1][1]);
+        assert!(cpu.display.screen[1][2]);
+        assert!(cpu.display.screen[1][3]);
+        assert!(cpu.display.screen[1][4]);
+        assert!(cpu.display.screen[1][5]);
+        assert!(cpu.display.screen[1][6]);
+        assert!(cpu.display.screen[1][7]);
+        assert!(cpu.display.screen[1][8]);
+    }
+
+    #[test]
+    fn drw_sets_vf_on_collision() {
+        let mut cpu = get_cpu();
+
+        cpu.memory.data[0x600] = 0xFF;
+        cpu.vi = 0x600;
+        cpu.v[0] = 1;
+        cpu.v[1] = 1;
+        cpu.memory.insert_instruction(0x200, 0xD111);
+
+        cpu.execute_next_instruction();
+        assert_eq!(cpu.v[VF_INDEX], 0x0);
+
+        cpu.pc = 0x200;
+        cpu.execute_next_instruction();
+        assert_eq!(cpu.v[VF_INDEX], 0x1);
     }
 
     #[test]
@@ -958,17 +976,45 @@ mod tests {
 
         cpu.execute_next_instruction();
 
-        assert_eq!(cpu.vi, 0xD0);
+        assert_eq!(cpu.vi, 0x41);
     }
 
     #[test]
-    fn ld_vx_k() {
+    fn ld_vx_k_stores_key_when_pressed() {
         let mut cpu = load_new_cpu_with_instruction(0xF00A);
         cpu.keyboard.curr_keydowns = vec![0x4];
 
         cpu.execute_next_instruction();
 
         assert_eq!(cpu.v[0], 0x4);
+        assert!(!cpu.is_waiting_for_key());
+    }
+
+    #[test]
+    fn ld_vx_k_blocks_when_no_key_pressed() {
+        let mut cpu = load_new_cpu_with_instruction(0xF00A);
+        cpu.keyboard.curr_keydowns = vec![];
+
+        cpu.execute_next_instruction();
+
+        assert!(cpu.is_waiting_for_key());
+        assert_eq!(cpu.pc, 0x200);
+    }
+
+    #[test]
+    fn ld_vx_k_resumes_when_key_pressed() {
+        let mut cpu = load_new_cpu_with_instruction(0xF00A);
+        cpu.keyboard.curr_keydowns = vec![];
+
+        cpu.execute_next_instruction();
+        assert!(cpu.is_waiting_for_key());
+
+        cpu.keyboard.curr_keydowns = vec![0x7];
+        cpu.execute_next_instruction();
+
+        assert!(!cpu.is_waiting_for_key());
+        assert_eq!(cpu.v[0], 0x7);
+        assert_eq!(cpu.pc, 0x202);
     }
 
     #[test]
@@ -1040,6 +1086,28 @@ mod tests {
     }
 
     #[test]
+    fn ld_mem_i_vx_includes_vf() {
+        let mut cpu = load_new_cpu_with_instruction(0xFF55);
+        cpu.vi = 0x600;
+        cpu.v[VF_INDEX] = 0xAB;
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.memory.get(0x60F), 0xAB);
+    }
+
+    #[test]
+    fn ld_mem_vx_i_reads_vf() {
+        let mut cpu = load_new_cpu_with_instruction(0xFF65);
+        cpu.vi = 0x600;
+        cpu.memory.write(0x60F, 0xCD);
+
+        cpu.execute_next_instruction();
+
+        assert_eq!(cpu.v[VF_INDEX], 0xCD);
+    }
+
+    #[test]
     fn skp_vx_skip_if_pressed() {
         let mut cpu = load_new_cpu_with_instruction(0xE09E);
         cpu.v[0] = 0x4;
@@ -1085,5 +1153,30 @@ mod tests {
         cpu.execute_next_instruction();
 
         assert_eq!(cpu.pc, 0x202);
+    }
+
+    #[test]
+    fn get_op_halts_at_end_of_memory() {
+        let mut cpu = get_cpu();
+
+        cpu.pc = 0xFFE;
+        assert!(cpu.get_op().is_some());
+
+        cpu.pc = 0xFFF;
+        assert!(cpu.get_op().is_none());
+
+        cpu.pc = 0x1000;
+        assert!(cpu.get_op().is_none());
+    }
+
+    #[test]
+    fn peek_word_reads_without_advancing_pc() {
+        let cpu = load_new_cpu_with_instruction(0xABCD);
+        let pc_before = cpu.pc;
+
+        assert_eq!(cpu.peek_word(0x200), Some(0xABCD));
+        assert_eq!(cpu.pc, pc_before);
+
+        assert_eq!(cpu.peek_word(0x1000), None);
     }
 }

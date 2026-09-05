@@ -1,100 +1,193 @@
-use std::{cell::RefCell, fs::File, io::Write, rc::Rc};
+use std::fs::File;
+use std::io::Write;
+use std::time::{Duration, Instant};
+
+use clap::Parser;
+use minifb::{Key, KeyRepeat, Scale, ScaleMode, Window, WindowOptions};
 
 use crate::{
     cpu::CPU,
+    debug_gui::{DebugWindow, DEBUG_HEIGHT, DEBUG_WIDTH},
     display::{Display, SCREEN_HEIGHT, SCREEN_WIDTH},
     keyboard::{minifb_keyboard::MiniFbKeyboard, Keyboard},
     memory::Memory,
 };
-use clap::{load_yaml, App};
-use minifb::{Key, Window, WindowOptions};
 
 mod cpu;
+mod debug_gui;
+mod disasm;
 mod display;
 mod keyboard;
 mod memory;
 mod opcode;
 
-// Chip-8 CPU based on Cowgod's Technical Spec for Chip-8
-// http://devernay.free.fr/hacks/chip8/C8TECH10.HTM
-fn main() {
-    let yaml = load_yaml!("../cli.yml");
-    let matches = App::from_yaml(yaml).get_matches();
+// The delay/sound timers tick at 60 Hz.
+const TIMER_TICK: Duration = Duration::from_micros(16_667);
 
-    let window: Rc<RefCell<_>> = Rc::new(RefCell::new(
-        Window::new(
-            "Chip8.rs - ESC to exit - F1: Debug, F2: Step, F3: Stop, F4: Continue",
-            SCREEN_WIDTH,
-            SCREEN_HEIGHT,
-            WindowOptions {
-                scale: minifb::Scale::X8,
-                scale_mode: minifb::ScaleMode::Stretch,
-                ..WindowOptions::default()
-            },
+// A typical CHIP-8 runs a few hundred instructions per second.
+const DEFAULT_SPEED: u64 = 700;
+
+const SCALE_OPTIONS: &[usize] = &[1, 2, 4, 8, 16, 32];
+
+#[derive(Parser)]
+#[command(about = "A Chip-8 interpreter")]
+struct Args {
+    /// The Chip8 ROM (.ch8) file to use
+    input: String,
+
+    /// CPU speed, in instructions executed per second
+    #[arg(short, long, default_value_t = DEFAULT_SPEED)]
+    speed: u64,
+
+    /// Window scale factor (1, 2, 4, 8, 16 or 32)
+    #[arg(long, default_value_t = 8)]
+    scale: usize,
+
+    /// Open a separate debugger window showing CPU state, disassembly and memory
+    #[arg(long)]
+    debug: bool,
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let args = Args::parse();
+
+    let scale = minifb_scale(args.scale).ok_or_else(|| {
+        format!(
+            "{} is not a valid scale; choose one of {:?}",
+            args.scale, SCALE_OPTIONS
         )
-        .unwrap_or_else(|e| {
-            panic!("{}", e);
-        }),
-    ));
+    })?;
 
-    let memory = Memory::initialise_from_file(matches.value_of("INPUT").unwrap());
+    let mut window = Window::new(
+        "Chip8.rs - ESC: quit, F1: mem dump, F2: step, F3: pause, F4: resume",
+        SCREEN_WIDTH,
+        SCREEN_HEIGHT,
+        WindowOptions {
+            scale,
+            scale_mode: ScaleMode::Stretch,
+            ..WindowOptions::default()
+        },
+    )?;
+    window.limit_update_rate(Some(Duration::from_millis(16)));
+
+    let memory = Memory::initialise_from_file(&args.input)?;
     let display = Display::initialise();
     let keyboard = MiniFbKeyboard::initialise(&window);
     let mut cpu = CPU::initialise(memory, display, keyboard);
 
-    let mut inner_window = window.borrow_mut();
-    inner_window.limit_update_rate(Some(std::time::Duration::from_micros(16000)));
+    let mut debugger: Option<Window> = if args.debug {
+        Some(Window::new(
+            "Chip8.rs - Debugger",
+            DEBUG_WIDTH,
+            DEBUG_HEIGHT,
+            WindowOptions {
+                scale: Scale::X2,
+                scale_mode: ScaleMode::Stretch,
+                ..WindowOptions::default()
+            },
+        )?)
+    } else {
+        None
+    };
+    let mut debug_window = debugger
+        .as_ref()
+        .map(|_| DebugWindow::initialise(DEBUG_WIDTH, DEBUG_HEIGHT));
 
-    let last_cycle_time = chrono::Utc::now().time();
-    let mut should_run = true;
-    while inner_window.is_open() && !inner_window.is_key_down(Key::Escape) {
-        let curr_cycle_time = chrono::Utc::now().time();
+    let mut running = true;
+    let mut last_frame = Instant::now();
+    let mut timer_accumulator = Duration::ZERO;
+    let mut cycle_accumulator = 0.0;
+    let mut was_beeping = false;
 
-        if curr_cycle_time - last_cycle_time
-            > chrono::Duration::milliseconds(cpu::DELAY_INCREMENT.into())
-        {
+    while window.is_open() && !window.is_key_down(Key::Escape) {
+        let now = Instant::now();
+        let elapsed = now - last_frame;
+        last_frame = now;
+
+        // Tick the delay/sound timers at 60 Hz regardless of frame rate.
+        timer_accumulator += elapsed;
+        while timer_accumulator >= TIMER_TICK {
             cpu.decrement_delay_timer();
-        }
-
-        if curr_cycle_time - last_cycle_time
-            > chrono::Duration::milliseconds(cpu::SOUND_DELAY_INCREMENT.into())
-        {
             cpu.decrement_sound_timer();
+            timer_accumulator -= TIMER_TICK;
         }
 
-        if inner_window.is_key_pressed(Key::F1, minifb::KeyRepeat::No) {
-            println!("Dumping memory to chip8rs_memdump.log");
-            dump_memory(&mut cpu.memory);
+        // Beep once each time the sound timer activates.
+        if cpu.sound_timer > 0 && !was_beeping {
+            play_beep();
+            was_beeping = true;
+        } else if cpu.sound_timer == 0 {
+            was_beeping = false;
         }
 
-        let keys: Vec<u8> = inner_window
-            .get_keys_pressed(minifb::KeyRepeat::Yes)
-            .unwrap()
+        let keys: Vec<u8> = window
+            .get_keys_pressed(KeyRepeat::Yes)
+            .unwrap_or_default()
             .iter()
             .filter_map(|k| key_to_u8(*k))
             .collect();
-
         cpu.keyboard.update_state(&keys);
 
-        if should_run {
+        if running {
+            if cpu.is_waiting_for_key() {
+                // FX0A has halted the CPU; resume the moment a key is pressed.
+                if !keys.is_empty() {
+                    cpu.execute_next_instruction();
+                }
+                cycle_accumulator = 0.0;
+            } else {
+                // Execute as many instructions as the elapsed time permits.
+                cycle_accumulator += elapsed.as_secs_f64() * args.speed as f64;
+                let mut steps = cycle_accumulator as usize;
+                cycle_accumulator -= steps as f64;
+
+                while steps > 0 {
+                    if cpu.is_waiting_for_key() {
+                        break;
+                    }
+                    cpu.execute_next_instruction();
+                    steps -= 1;
+                }
+            }
+        } else if window.is_key_pressed(Key::F2, KeyRepeat::Yes) {
             cpu.execute_next_instruction();
-        } else {
-            if inner_window.is_key_pressed(Key::F2, minifb::KeyRepeat::Yes) {
-                cpu.execute_next_instruction();
+        }
+
+        if window.is_key_pressed(Key::F3, KeyRepeat::No) {
+            running = false;
+        }
+        if window.is_key_pressed(Key::F4, KeyRepeat::No) {
+            running = true;
+        }
+        if window.is_key_pressed(Key::F1, KeyRepeat::No) {
+            println!("Dumping memory to chip8rs_memdump.log");
+            dump_memory(&cpu.memory);
+        }
+
+        window.update_with_buffer(&cpu.display.get_buffer(), SCREEN_WIDTH, SCREEN_HEIGHT)?;
+
+        if let (Some(debug_window), Some(debugger)) =
+            (debug_window.as_mut(), debugger.as_mut())
+        {
+            if debugger.is_open() {
+                debug_window.render(&cpu, running);
+                debugger.update_with_buffer(debug_window.buffer(), DEBUG_WIDTH, DEBUG_HEIGHT)?;
             }
         }
+    }
 
-        if inner_window.is_key_pressed(Key::F3, minifb::KeyRepeat::No) {
-            should_run = false;
-        }
+    Ok(())
+}
 
-        if inner_window.is_key_pressed(Key::F4, minifb::KeyRepeat::No) {
-            should_run = true;
-        }
-
-        inner_window
-            .update_with_buffer(&cpu.display.get_buffer(), SCREEN_WIDTH, SCREEN_HEIGHT)
-            .unwrap();
+fn minifb_scale(scale: usize) -> Option<Scale> {
+    match scale {
+        1 => Some(Scale::X1),
+        2 => Some(Scale::X2),
+        4 => Some(Scale::X4),
+        8 => Some(Scale::X8),
+        16 => Some(Scale::X16),
+        32 => Some(Scale::X32),
+        _ => None,
     }
 }
 
@@ -120,7 +213,23 @@ fn key_to_u8(key: Key) -> Option<u8> {
     }
 }
 
-fn dump_memory(memory: &mut Memory) {
-    let mut file = File::create("chip8rs_memdump.log").unwrap();
-    file.write_all(&memory.data).unwrap();
+fn dump_memory(memory: &Memory) {
+    let mut file = File::create("chip8rs_memdump.log").expect("Failed to open memory dump file");
+    file.write_all(&memory.data)
+        .expect("Failed to write memory dump file");
+}
+
+fn play_beep() {
+    #[cfg(target_os = "macos")]
+    let _ = std::process::Command::new("afplay")
+        .arg("/System/Library/Sounds/Glass.aiff")
+        .spawn();
+
+    #[cfg(target_os = "linux")]
+    let _ = std::process::Command::new("paplay")
+        .arg("/usr/share/sounds/freedesktop/stereo/bell.oga")
+        .spawn();
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    println!("\x07");
 }
