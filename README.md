@@ -6,7 +6,7 @@ views.
 
 ## Debugger
 
-![CHIP-8 debugger showing registers, disassembly, and memory](https://github.com/SylvanB/chip8-rs/releases/download/v0.1.0/chip8-debugger-clean.png)
+![CHIP-8 debugger showing registers, disassembly, and memory](assets/chip8-debugger-demo.png)
 
 The emulator targets the original CHIP-8 instruction set described in
 [Cowgod's technical reference][chip8-spec]. Core CPU, display, memory,
