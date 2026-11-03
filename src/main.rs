@@ -166,9 +166,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         window.update_with_buffer(&cpu.display.get_buffer(), SCREEN_WIDTH, SCREEN_HEIGHT)?;
 
-        if let (Some(debug_window), Some(debugger)) =
-            (debug_window.as_mut(), debugger.as_mut())
-        {
+        if let (Some(debug_window), Some(debugger)) = (debug_window.as_mut(), debugger.as_mut()) {
             if debugger.is_open() {
                 debug_window.render(&cpu, running);
                 debugger.update_with_buffer(debug_window.buffer(), DEBUG_WIDTH, DEBUG_HEIGHT)?;

@@ -2,6 +2,11 @@
 name = "chip8_rs"
 version = "0.1.0"
 edition = "2021"
+description = "A CHIP-8 emulator with an interactive debugger"
+license = "MIT"
+repository = "https://github.com/SylvanB/chip8-rs"
+keywords = ["chip8", "emulator", "retro", "debugger"]
+categories = ["emulators"]
 
 [dependencies]
 rand = "0.8"
