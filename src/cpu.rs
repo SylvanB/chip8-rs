@@ -460,7 +460,9 @@ where
             sprite[i as usize] = self.memory.get((self.vi + (i as u16)) as usize);
         }
 
-        self.v[VF_INDEX] = self.display.display_sprite((x as usize, y as usize), &sprite) as u8;
+        self.v[VF_INDEX] = self
+            .display
+            .display_sprite((x as usize, y as usize), &sprite) as u8;
     }
 
     /// Skip the next instruction if the key corresponding to the value currently in Vx is pressed.
@@ -476,7 +478,12 @@ where
     fn sknp_vx(&mut self, op: &OpCode) {
         let vx = self.v[op.x() as usize];
 
-        if self.keyboard.get_current_keydowns().iter().all(|&k| k != vx) {
+        if self
+            .keyboard
+            .get_current_keydowns()
+            .iter()
+            .all(|&k| k != vx)
+        {
             self.pc += 2;
         }
     }
@@ -497,11 +504,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        display::Display,
-        keyboard::dummy_keyboard::DummyKeyboard,
-        memory::Memory,
-    };
+    use crate::{display::Display, keyboard::dummy_keyboard::DummyKeyboard, memory::Memory};
 
     use super::*;
 
