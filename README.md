@@ -4,6 +4,10 @@ A CHIP-8 interpreter written in Rust. It runs ROMs in a scaled framebuffer and
 includes an optional debugger with register, stack, disassembly, and memory
 views.
 
+## Debugger
+
+![CHIP-8 debugger showing registers, disassembly, and memory](https://github.com/SylvanB/chip8-rs/releases/download/v0.1.0/chip8-debugger-clean.png)
+
 The emulator targets the original CHIP-8 instruction set described in
 [Cowgod's technical reference][chip8-spec]. Core CPU, display, memory,
 keyboard, disassembler, and debugger behavior are covered by unit tests.
