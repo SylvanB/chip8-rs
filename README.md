@@ -6,8 +6,6 @@ views.
 
 ## Debugger
 
-![CHIP-8 debugger showing registers, disassembly, and memory](assets/chip8-debugger-demo.png)
-
 The emulator targets the original CHIP-8 instruction set described in
 [Cowgod's technical reference][chip8-spec]. Core CPU, display, memory,
 keyboard, disassembler, and debugger behavior are covered by unit tests.
